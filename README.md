@@ -1,73 +1,107 @@
-# Welcome to your Lovable project
 
-## Project info
+# VitronMax - BBB Permeability Prediction Platform
 
-**URL**: https://lovable.dev/projects/a434ca1e-d535-43b1-bd09-2e249a94a9a0
+A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) permeability prediction.
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+- **API-First Design**: RESTful API with comprehensive endpoints
+- **Batch Processing**: Async CSV upload and processing
+- **ML Predictions**: Random Forest model with Morgan fingerprints
+- **AI Explanations**: GPT-powered molecular insights
+- **Modern Dashboard**: React/Next.js interface
+- **Production Ready**: Docker, CI/CD, monitoring
 
-**Use Lovable**
+## 📊 Performance Targets
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/a434ca1e-d535-43b1-bd09-2e249a94a9a0) and start prompting.
+- External AUC-ROC ≥ 0.90
+- 95th-percentile latency < 800ms
+- 80%+ test coverage
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠 Tech Stack
 
-**Use your preferred IDE**
+### Backend
+- Python 3.10 + FastAPI
+- RDKit for molecular processing
+- scikit-learn RandomForest
+- Supabase (Postgres + Storage)
+- OpenAI API integration
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Frontend
+- Next.js 14 + TypeScript
+- Tailwind CSS + shadcn/ui
+- React Query for data fetching
+- Recharts for visualizations
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Infrastructure
+- Fly.io deployment
+- GitHub Actions CI/CD
+- Docker containerization
+- Playwright E2E testing
 
-Follow these steps:
+## 🚀 Quick Start
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+# Clone and setup
+git clone <repo-url>
+cd VitronMax
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Backend setup
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Frontend setup
+cd ../frontend
+npm install
 npm run dev
+
+# Docker deployment
+docker build -t vitronmax .
+docker run -p 8080:8080 vitronmax
 ```
 
-**Edit a file directly in GitHub**
+## 📚 Documentation
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- [Product Requirements](docs/PRD.md)
+- [API Documentation](docs/API-documentation.md)
+- [Deployment Guide](docs/DEPLOY.md)
 
-**Use GitHub Codespaces**
+## 🧪 Testing
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+# Backend tests
+pytest -q --cov=app
 
-## What technologies are used for this project?
+# Frontend tests
+npm test
 
-This project is built with:
+# E2E tests
+npx playwright test
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 📈 API Endpoints
 
-## How can I deploy this project?
+- `POST /predict_fp` - Single molecule prediction
+- `POST /batch_predict_csv` - Batch processing
+- `GET /batch_status/{id}` - Job status
+- `GET /download/{id}` - Download results
+- `GET /report/{molecule_id}` - PDF report
+- `POST /explain` - AI explanation
 
-Simply open [Lovable](https://lovable.dev/projects/a434ca1e-d535-43b1-bd09-2e249a94a9a0) and click on Share -> Publish.
+## 🔧 Environment Setup
 
-## Can I connect a custom domain to my Lovable project?
+Copy `.env.example` to `.env` and configure:
 
-Yes, you can!
+```env
+OPENAI_API_KEY=your_key
+SUPABASE_URL=your_url
+SUPABASE_SERVICE_KEY=your_key
+STORAGE_BUCKET_NAME=vitronmax-storage
+LOG_LEVEL=INFO
+ENV=development
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📄 License
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+MIT License - see LICENSE file for details.
