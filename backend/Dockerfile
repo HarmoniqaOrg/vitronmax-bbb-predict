@@ -5,10 +5,20 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Added build-essential for a more complete build environment.
+# Added common libraries that can help with compilation of scientific packages.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libfontconfig1 \
+    libfreetype6 \
+    libxrender1 \
+    libxext6 \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip, setuptools, and wheel first
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
