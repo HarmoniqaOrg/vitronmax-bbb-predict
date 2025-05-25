@@ -25,7 +25,7 @@ class PredictionRequest(BaseModel):
     molecule_name: Optional[str] = Field(None, description="Optional molecule name")
 
     @validator("smiles")
-    def validate_smiles(cls, v):
+    def validate_smiles(cls, v: str) -> str:
         """Basic SMILES validation."""
         if not v or len(v.strip()) == 0:
             raise ValueError("SMILES string cannot be empty")
@@ -93,7 +93,7 @@ class ExplainRequest(BaseModel):
     )
 
     @validator("smiles")
-    def validate_smiles(cls, v):
+    def validate_smiles(cls, v: str) -> str:
         """Basic SMILES validation."""
         if not v or len(v.strip()) == 0:
             raise ValueError("SMILES string cannot be empty")

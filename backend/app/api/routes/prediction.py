@@ -7,7 +7,6 @@ import time
 from fastapi import APIRouter, HTTPException, Depends
 from app.models.schemas import PredictionRequest, PredictionResponse
 from app.ml.predictor import BBBPredictor
-from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

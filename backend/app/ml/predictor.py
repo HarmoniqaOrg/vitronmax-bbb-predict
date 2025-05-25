@@ -10,7 +10,7 @@ from pathlib import Path
 import hashlib
 
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors, Descriptors
+from rdkit.Chem import rdMolDescriptors
 from sklearn.ensemble import RandomForestClassifier
 
 from app.core.config import settings

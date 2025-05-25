@@ -19,6 +19,8 @@ os.environ["STORAGE_BUCKET_NAME"] = "test-bucket"
 os.environ["ENV"] = "test"
 os.environ["LOG_LEVEL"] = "ERROR"
 
+# Remove potentially problematic env vars for testing
+os.environ.pop("FLY_API_TOKEN", None)
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_supabase():

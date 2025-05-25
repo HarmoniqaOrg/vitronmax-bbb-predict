@@ -4,7 +4,6 @@ Batch processing endpoints for CSV uploads and job management.
 
 import logging
 import uuid
-import asyncio
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -195,11 +194,11 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
                     processed_molecules=job_data.get("processed_molecules", 0),
                     failed_molecules=job_data.get("failed_molecules", 0),
                     progress_percentage=job_data.get("progress_percentage", 0.0),
-                    estimated_completion_time=datetime.fromisoformat(
-                        job_data["estimated_completion_time"]
-                    )
-                    if job_data.get("estimated_completion_time")
-                    else None,
+                    estimated_completion_time=(
+                        datetime.fromisoformat(job_data["estimated_completion_time"])
+                        if job_data.get("estimated_completion_time")
+                        else None
+                    ),
                     results_file_path=job_data.get("results_file_path"),
                     error_message=job_data.get("error_message"),
                 )
@@ -240,7 +239,9 @@ async def batch_predict_csv(
 
         # Clean and prepare data
         df = df.dropna(subset=["smiles"])
-        df["molecule_name"] = df.get("molecule_name", pd.Series(dtype='object')).fillna("") # Ensure column exists even if not in CSV
+        df["molecule_name"] = df.get("molecule_name", pd.Series(dtype="object")).fillna(
+            ""
+        )  # Ensure column exists even if not in CSV
 
         smiles_data = df[["smiles", "molecule_name"]].to_dict("records")
 
@@ -255,7 +256,11 @@ async def batch_predict_csv(
 
         job_data = {
             "job_id": job_id,
-            "job_name": request.job_name if request.job_name else f"Batch Job {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            "job_name": (
+                request.job_name
+                if request.job_name
+                else f"Batch Job {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+            ),
             "status": JobStatus.PENDING.value,
             "total_molecules": len(smiles_data),
             "created_at": datetime.utcnow().isoformat(),
@@ -281,17 +286,21 @@ async def batch_predict_csv(
         raise
     except Exception as e:
         logger.error(f"Error creating batch job: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Error creating batch job: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error creating batch job: {e}")
 
 
 @router.get("/batch_status/{job_id}", response_model=BatchStatusResponse)
-async def get_batch_status(job_id: str, db: Any = Depends(get_db)) -> BatchStatusResponse:
+async def get_batch_status(
+    job_id: str, db: Any = Depends(get_db)
+) -> BatchStatusResponse:
     """Get status of a specific batch job."""
     try:
         response = (
-            db.table("batch_jobs").select("*").eq("job_id", job_id).maybe_single().execute()
+            db.table("batch_jobs")
+            .select("*")
+            .eq("job_id", job_id)
+            .maybe_single()
+            .execute()
         )
         job_data = response.data
 
@@ -309,20 +318,18 @@ async def get_batch_status(job_id: str, db: Any = Depends(get_db)) -> BatchStatu
             failed_molecules=job_data.get("failed_molecules", 0),
             progress_percentage=job_data.get("progress_percentage", 0.0),
             results_file_path=job_data.get("results_file_path"),
-            estimated_completion_time=datetime.fromisoformat(
-                job_data["estimated_completion_time"]
-            )
-            if job_data.get("estimated_completion_time")
-            else None,
+            estimated_completion_time=(
+                datetime.fromisoformat(job_data["estimated_completion_time"])
+                if job_data.get("estimated_completion_time")
+                else None
+            ),
             error_message=job_data.get("error_message"),
         )
-    except HTTPException: # Re-raise HTTP exceptions
+    except HTTPException:  # Re-raise HTTP exceptions
         raise
     except Exception as e:
         logger.error(f"Error fetching status for job {job_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Error fetching job status: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error fetching job status: {e}")
 
 
 @router.get("/download_batch_results/{job_id}")
@@ -330,7 +337,11 @@ async def download_batch_results(job_id: str, db: Any = Depends(get_db)):
     """Download results CSV for a completed batch job."""
     try:
         response = (
-            db.table("batch_jobs").select("status, results_file_path").eq("job_id", job_id).maybe_single().execute()
+            db.table("batch_jobs")
+            .select("status, results_file_path")
+            .eq("job_id", job_id)
+            .maybe_single()
+            .execute()
         )
         job_data = response.data
 
@@ -360,10 +371,8 @@ async def download_batch_results(job_id: str, db: Any = Depends(get_db)):
                 "Content-Disposition": f"attachment; filename=batch_results_{job_id}.csv"
             },
         )
-    except HTTPException: # Re-raise HTTP exceptions
+    except HTTPException:  # Re-raise HTTP exceptions
         raise
     except Exception as e:
         logger.error(f"Error downloading results for job {job_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Error downloading results: {e}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error downloading results: {e}")

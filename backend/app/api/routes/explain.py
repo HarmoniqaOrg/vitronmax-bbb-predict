@@ -100,10 +100,10 @@ async def explain_prediction(
         # Check if OpenAI API key is configured
         if not settings.OPENAI_API_KEY:
             raise HTTPException(
-                status_code=500, 
-                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+                status_code=500,
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.",
             )
-        
+
         # If no prediction result provided, generate one
         if not request.prediction_result:
             probability, pred_class, confidence, fingerprint = predictor.predict_single(
@@ -131,8 +131,8 @@ async def explain_prediction(
                 "Connection": "keep-alive",
                 "Content-Type": "text/event-stream",
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Content-Type"
-            }
+                "Access-Control-Allow-Headers": "Content-Type",
+            },
         )
 
     except ValueError as e:
