@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { FlaskConical, Layers, RefreshCw } from 'lucide-react';
+import { Layers, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import apiClient from '@/lib/api';
 import type { BatchJob } from '@/lib/types';
@@ -21,7 +21,9 @@ const RecentActivityList = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching batch jobs from API...');
       const jobs = await apiClient.getAllBatchJobs();
+      console.log('Received batch jobs:', jobs);
       setBatchJobs(jobs.slice(0, 5)); // Show only recent 5 jobs
     } catch (err) {
       console.error('Failed to fetch batch jobs:', err);

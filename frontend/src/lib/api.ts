@@ -45,7 +45,7 @@ export const apiClient = {
     return response.data;
   },
 
-  // Batch prediction
+  // Batch prediction - updated to match your FastAPI backend
   uploadBatchFile: async (formData: BatchUploadFormData): Promise<BatchJob> => {
     const form = new FormData();
     form.append('file', formData.file);
