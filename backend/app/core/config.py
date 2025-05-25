@@ -1,11 +1,11 @@
-
 """
 Application configuration settings.
 """
 
 import os
-from typing import Optional
-from pydantic import BaseSettings
+from typing import Optional, List
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -18,6 +18,14 @@ class Settings(BaseSettings):
 
     # CORS settings
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://vitronmax.fly.dev"]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
+        """Parse CORS origins from environment variable."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
 
     # Database and Storage settings
     SUPABASE_URL: str
@@ -34,10 +42,12 @@ class Settings(BaseSettings):
     
     # Model settings
     MODEL_VERSION: str = "v1.0"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
 
 
 # Global settings instance
