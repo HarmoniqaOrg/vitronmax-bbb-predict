@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Send, Info } from 'lucide-react';
 import apiClient from '@/lib/api';
@@ -50,7 +49,8 @@ export default function ExplainPage() {
       const response = await apiClient.explainPrediction(request);
       
       if (!response.ok) {
-        throw new Error('Failed to get explanation');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to get explanation');
       }
       
       // Handle server-sent events
@@ -66,7 +66,7 @@ export default function ExplainPage() {
         if (done) break;
         
         const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n');
+        const lines = chunk.split('\n');
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -77,6 +77,9 @@ export default function ExplainPage() {
                 setExplanation(prev => prev + jsonData.content);
               } else if (jsonData.error) {
                 setError(jsonData.error);
+              } else if (jsonData.done) {
+                // Stream completed
+                break;
               }
             } catch (e) {
               console.error('Failed to parse JSON:', e);
@@ -85,12 +88,12 @@ export default function ExplainPage() {
         }
       }
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error getting explanation:', err);
-      setError('Failed to get explanation. Please try again.');
+      setError(err.message || 'Failed to get explanation. Please try again.');
       toast({
         title: 'Error',
-        description: 'Failed to get explanation',
+        description: err.message || 'Failed to get explanation',
         variant: 'destructive',
       });
     } finally {
@@ -98,14 +101,15 @@ export default function ExplainPage() {
     }
   };
   
-  // Function to load sample explanation for demo purposes
+  // Function to load sample explanation
   const loadSampleExplanation = async () => {
     setIsLoading(true);
     
     try {
       const sample = await apiClient.getSampleExplanation();
       setExplanation(sample.explanation);
-    } catch (err) {
+      setError(null);
+    } catch (err: any) {
       console.error('Error loading sample explanation:', err);
       toast({
         title: 'Error',
@@ -161,6 +165,7 @@ export default function ExplainPage() {
                   type="button"
                   variant="outline"
                   onClick={loadSampleExplanation}
+                  disabled={isLoading}
                 >
                   <Info className="mr-2 h-4 w-4" />
                   Load Sample
@@ -182,6 +187,7 @@ export default function ExplainPage() {
               <CardContent className="overflow-auto max-h-[600px]">
                 {isLoading && !explanation && (
                   <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
                     <p className="text-muted-foreground">Generating explanation...</p>
                   </div>
                 )}
@@ -194,9 +200,7 @@ export default function ExplainPage() {
                 
                 {explanation ? (
                   <div className="prose dark:prose-invert max-w-none">
-                    {explanation.split('\n').map((line, i) => (
-                      <p key={i}>{line}</p>
-                    ))}
+                    <div className="whitespace-pre-wrap">{explanation}</div>
                   </div>
                 ) : !isLoading && !error ? (
                   <div className="text-center py-12">

@@ -7,7 +7,7 @@ import json
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-import openai
+from openai import AsyncOpenAI
 
 from app.models.schemas import ExplainRequest
 from app.core.config import settings
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Initialize OpenAI client
-openai.api_key = settings.OPENAI_API_KEY
+client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 def get_predictor() -> BBBPredictor:
@@ -62,7 +62,7 @@ Be concise but informative. Use technical terms appropriately but explain them w
 
     try:
         # Create OpenAI streaming completion
-        response = await openai.ChatCompletion.acreate(
+        stream = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -73,8 +73,8 @@ Be concise but informative. Use technical terms appropriately but explain them w
             max_tokens=1000,
         )
 
-        async for chunk in response:
-            if chunk.choices[0].delta.get("content"):
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 yield f"data: {json.dumps({'content': content})}\n\n"
 
@@ -97,6 +97,13 @@ async def explain_prediction(
     """
 
     try:
+        # Check if OpenAI API key is configured
+        if not settings.OPENAI_API_KEY:
+            raise HTTPException(
+                status_code=500, 
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+            )
+        
         # If no prediction result provided, generate one
         if not request.prediction_result:
             probability, pred_class, confidence, fingerprint = predictor.predict_single(
@@ -123,7 +130,9 @@ async def explain_prediction(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Content-Type": "text/event-stream",
-            },
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
         )
 
     except ValueError as e:

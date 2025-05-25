@@ -38,6 +38,8 @@ async def process_batch_job(
 ) -> None:
     """Background task to process batch prediction job."""
     db = get_db()
+    failed_count = 0
+    processed_count = 0
 
     try:
         logger.info(f"Starting batch job {job_id} with {len(smiles_data)} molecules")
@@ -51,12 +53,13 @@ async def process_batch_job(
         ).eq("job_id", job_id).execute()
 
         results = []
-        processed_count = 0
 
-        for item in smiles_data:
+        for i, item in enumerate(smiles_data):
             try:
                 smiles = item["smiles"]
                 molecule_name = item.get("molecule_name", "")
+
+                logger.info(f"Processing molecule {i + 1}/{len(smiles_data)}: {smiles}")
 
                 # Make prediction
                 probability, pred_class, confidence, fingerprint = (
@@ -75,21 +78,11 @@ async def process_batch_job(
                 results.append(result)
                 processed_count += 1
 
-                # Update progress every 100 molecules
-                if processed_count % 100 == 0:
-                    progress = (processed_count / len(smiles_data)) * 100
-                    db.table("batch_jobs").update(
-                        {
-                            "processed_molecules": processed_count,
-                            "progress_percentage": progress,
-                            "updated_at": datetime.utcnow().isoformat(),
-                        }
-                    ).eq("job_id", job_id).execute()
-
             except Exception as e:
                 logger.warning(
-                    f"Failed to process molecule {item.get('smiles', 'unknown')}: {e}"
+                    f"Failed to process molecule {item.get('smiles', 'unknown')} in job {job_id}: {e}"
                 )
+                failed_count += 1
                 results.append(
                     {
                         "smiles": item.get("smiles", ""),
@@ -101,72 +94,135 @@ async def process_batch_job(
                     }
                 )
 
+            # Update progress every 10 molecules or on completion
+            if (i + 1) % 10 == 0 or (i + 1) == len(smiles_data):
+                progress = ((i + 1) / len(smiles_data)) * 100
+                try:
+                    db.table("batch_jobs").update(
+                        {
+                            "processed_molecules": processed_count,
+                            "failed_molecules": failed_count,
+                            "progress_percentage": progress,
+                            "updated_at": datetime.utcnow().isoformat(),
+                        }
+                    ).eq("job_id", job_id).execute()
+                    logger.info(
+                        f"Job {job_id}: {i + 1}/{len(smiles_data)} molecules processed ({progress:.1f}%)"
+                    )
+                except Exception as e_progress:
+                    logger.error(
+                        f"Failed to update progress for job {job_id}: {e_progress}"
+                    )
+
         # Store results and update job status
         results_df = pd.DataFrame(results)
         csv_content = results_df.to_csv(index=False)
 
         # Upload results to storage
         file_name = f"batch_results_{job_id}.csv"
-        storage_response = db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
-            file_name, csv_content.encode()
-        )
+        try:
+            db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
+                file_name, csv_content.encode()
+            )
+            logger.info(f"Results for job {job_id} uploaded to storage: {file_name}")
+        except Exception as e_storage:
+            logger.error(
+                f"Failed to upload results to storage for job {job_id}: {e_storage}"
+            )
+            file_name = None  # Continue without storage upload if it fails
 
         # Update job as completed
-        db.table("batch_jobs").update(
-            {
-                "status": JobStatus.COMPLETED.value,
-                "processed_molecules": len(results),
-                "progress_percentage": 100.0,
-                "results_file_path": file_name,
-                "completed_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
-            }
-        ).eq("job_id", job_id).execute()
+        try:
+            db.table("batch_jobs").update(
+                {
+                    "status": JobStatus.COMPLETED.value,
+                    "processed_molecules": processed_count,
+                    "failed_molecules": failed_count,
+                    "progress_percentage": 100.0,
+                    "results_file_path": file_name,  # Might be None if upload failed
+                    "completed_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("job_id", job_id).execute()
+            logger.info(
+                f"Batch job {job_id} completed successfully with {processed_count} processed and {failed_count} failed molecules."
+            )
+        except Exception as e_complete:
+            logger.error(
+                f"Failed to update job completion status for job {job_id}: {e_complete}"
+            )
 
-        logger.info(f"Batch job {job_id} completed successfully")
+    except Exception as e_job:
+        logger.error(f"Batch job {job_id} failed critically: {e_job}", exc_info=True)
+        try:
+            db.table("batch_jobs").update(
+                {
+                    "status": JobStatus.FAILED.value,
+                    "error_message": str(e_job),
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("job_id", job_id).execute()
+        except Exception as e_fail_update:
+            logger.error(
+                f"Failed to update job {job_id} status to FAILED in DB: {e_fail_update}"
+            )
+
+
+@router.get("/batch_jobs", response_model=List[BatchStatusResponse])
+async def get_all_batch_jobs() -> List[BatchStatusResponse]:
+    """Get all batch jobs, ordered by creation date (newest first)."""
+    db = get_db()
+
+    try:
+        response = (
+            db.table("batch_jobs")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+
+        jobs = []
+        for job_data in response.data:
+            jobs.append(
+                BatchStatusResponse(
+                    job_id=job_data["job_id"],
+                    job_name=job_data.get("job_name"),
+                    status=JobStatus(job_data["status"]),
+                    created_at=datetime.fromisoformat(job_data["created_at"]),
+                    updated_at=datetime.fromisoformat(job_data["updated_at"]),
+                    total_molecules=job_data["total_molecules"],
+                    processed_molecules=job_data.get("processed_molecules", 0),
+                    failed_molecules=job_data.get("failed_molecules", 0),
+                    progress_percentage=job_data.get("progress_percentage", 0.0),
+                    estimated_completion_time=datetime.fromisoformat(
+                        job_data["estimated_completion_time"]
+                    )
+                    if job_data.get("estimated_completion_time")
+                    else None,
+                    results_file_path=job_data.get("results_file_path"),
+                    error_message=job_data.get("error_message"),
+                )
+            )
+
+        return jobs
 
     except Exception as e:
-        logger.error(f"Batch job {job_id} failed: {e}", exc_info=True)
-
-        # Update job as failed
-        db.table("batch_jobs").update(
-            {
-                "status": JobStatus.FAILED.value,
-                "error_message": str(e),
-                "updated_at": datetime.utcnow().isoformat(),
-            }
-        ).eq("job_id", job_id).execute()
+        logger.error(f"Failed to get batch jobs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve batch jobs")
 
 
 @router.post("/batch_predict_csv", response_model=BatchJobResponse)
 async def batch_predict_csv(
-    background_tasks: BackgroundTasks,
+    request: BatchPredictionRequest = Depends(),  # For job_name
     file: UploadFile = File(...),
-    job_name: str = None,
-    notify_email: str = None,
+    background_tasks: BackgroundTasks = Depends(),
     predictor: BBBPredictor = Depends(get_predictor),
+    db: Any = Depends(get_db),
 ) -> BatchJobResponse:
-    """
-    Upload CSV file for batch BBB permeability prediction.
-
-    Expected CSV format:
-    - Required column: 'smiles'
-    - Optional column: 'molecule_name'
-
-    Returns job ID for status tracking.
-    """
-    db = get_db()
-
+    """Accepts CSV file for batch BBB permeability prediction."""
     try:
-        # Validate file
-        if not file.filename.endswith(".csv"):
-            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
-
-        # Read and validate CSV
         content = await file.read()
-        if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="File too large")
-
         df = pd.read_csv(io.StringIO(content.decode()))
 
         # Validate required columns
@@ -184,26 +240,24 @@ async def batch_predict_csv(
 
         # Clean and prepare data
         df = df.dropna(subset=["smiles"])
-        df["molecule_name"] = df.get("molecule_name", "").fillna("")
+        df["molecule_name"] = df.get("molecule_name", pd.Series(dtype='object')).fillna("") # Ensure column exists even if not in CSV
 
         smiles_data = df[["smiles", "molecule_name"]].to_dict("records")
+
+        if not smiles_data:
+            raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
 
         # Create batch job
         job_id = str(uuid.uuid4())
         estimated_completion = datetime.utcnow() + timedelta(
-            minutes=len(smiles_data) * 0.1  # Estimate 0.1 min per molecule
+            seconds=len(smiles_data) * settings.ESTIMATED_TIME_PER_MOLECULE
         )
 
         job_data = {
             "job_id": job_id,
-            "job_name": job_name
-            or f"Batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+            "job_name": request.job_name if request.job_name else f"Batch Job {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
             "status": JobStatus.PENDING.value,
             "total_molecules": len(smiles_data),
-            "processed_molecules": 0,
-            "failed_molecules": 0,
-            "progress_percentage": 0.0,
-            "notify_email": notify_email,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
             "estimated_completion_time": estimated_completion.isoformat(),
@@ -219,92 +273,97 @@ async def batch_predict_csv(
         return BatchJobResponse(
             job_id=job_id,
             status=JobStatus.PENDING,
-            created_at=datetime.utcnow(),
+            message="Batch job created successfully",
             estimated_completion_time=estimated_completion,
             total_molecules=len(smiles_data),
         )
-
-    except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="CSV file is empty")
-    except pd.errors.ParserError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
+    except HTTPException:  # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        logger.error(f"Batch upload failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to process batch upload")
+        logger.error(f"Error creating batch job: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Error creating batch job: {e}"
+        )
 
 
 @router.get("/batch_status/{job_id}", response_model=BatchStatusResponse)
-async def get_batch_status(job_id: str) -> BatchStatusResponse:
-    """Get status of batch prediction job."""
-    db = get_db()
-
+async def get_batch_status(job_id: str, db: Any = Depends(get_db)) -> BatchStatusResponse:
+    """Get status of a specific batch job."""
     try:
-        response = db.table("batch_jobs").select("*").eq("job_id", job_id).execute()
+        response = (
+            db.table("batch_jobs").select("*").eq("job_id", job_id).maybe_single().execute()
+        )
+        job_data = response.data
 
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        job_data = response.data[0]
+        if not job_data:
+            raise HTTPException(status_code=404, detail="Batch job not found")
 
         return BatchStatusResponse(
             job_id=job_data["job_id"],
+            job_name=job_data.get("job_name"),
             status=JobStatus(job_data["status"]),
             created_at=datetime.fromisoformat(job_data["created_at"]),
             updated_at=datetime.fromisoformat(job_data["updated_at"]),
             total_molecules=job_data["total_molecules"],
-            processed_molecules=job_data["processed_molecules"],
-            failed_molecules=job_data["failed_molecules"],
-            progress_percentage=job_data["progress_percentage"],
-            estimated_completion_time=(
-                datetime.fromisoformat(job_data["estimated_completion_time"])
-                if job_data.get("estimated_completion_time")
-                else None
-            ),
+            processed_molecules=job_data.get("processed_molecules", 0),
+            failed_molecules=job_data.get("failed_molecules", 0),
+            progress_percentage=job_data.get("progress_percentage", 0.0),
+            results_file_path=job_data.get("results_file_path"),
+            estimated_completion_time=datetime.fromisoformat(
+                job_data["estimated_completion_time"]
+            )
+            if job_data.get("estimated_completion_time")
+            else None,
             error_message=job_data.get("error_message"),
         )
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException: # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        logger.error(f"Failed to get batch status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve job status")
+        logger.error(f"Error fetching status for job {job_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching job status: {e}"
+        )
 
 
-@router.get("/download/{job_id}")
-async def download_batch_results(job_id: str) -> StreamingResponse:
-    """Download batch prediction results as CSV."""
-    db = get_db()
-
+@router.get("/download_batch_results/{job_id}")
+async def download_batch_results(job_id: str, db: Any = Depends(get_db)):
+    """Download results CSV for a completed batch job."""
     try:
-        # Get job info
-        response = db.table("batch_jobs").select("*").eq("job_id", job_id).execute()
+        response = (
+            db.table("batch_jobs").select("status, results_file_path").eq("job_id", job_id).maybe_single().execute()
+        )
+        job_data = response.data
 
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Job not found")
+        if not job_data:
+            raise HTTPException(status_code=404, detail="Batch job not found")
 
-        job_data = response.data[0]
+        if JobStatus(job_data["status"]) != JobStatus.COMPLETED:
+            raise HTTPException(
+                status_code=400, detail="Job not completed. Results not available."
+            )
 
-        if job_data["status"] != JobStatus.COMPLETED.value:
-            raise HTTPException(status_code=400, detail="Job not completed yet")
+        file_path = job_data.get("results_file_path")
+        if not file_path:
+            raise HTTPException(
+                status_code=404, detail="Results file path not found for this job."
+            )
 
-        # Download results file
-        file_path = job_data["results_file_path"]
+        # Download results file from storage
         storage_response = db.storage.from_(settings.STORAGE_BUCKET_NAME).download(
             file_path
         )
-
-        # Create streaming response
-        def generate():
-            yield storage_response
 
         return StreamingResponse(
             io.BytesIO(storage_response),
             media_type="text/csv",
             headers={
-                "Content-Disposition": f"attachment; filename=results_{job_id}.csv"
+                "Content-Disposition": f"attachment; filename=batch_results_{job_id}.csv"
             },
         )
-
+    except HTTPException: # Re-raise HTTP exceptions
+        raise
     except Exception as e:
-        logger.error(f"Download failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to download results")
+        logger.error(f"Error downloading results for job {job_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Error downloading results: {e}"
+        )
