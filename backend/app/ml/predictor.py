@@ -3,7 +3,7 @@ BBB permeability prediction using Random Forest and Morgan fingerprints.
 """
 
 import logging
-import joblib  # type: ignore[import-untyped]
+import joblib
 import numpy as np
 from numpy.typing import NDArray
 from typing import List, Tuple, Optional
@@ -11,9 +11,9 @@ from typing import List, Tuple, Optional
 from pathlib import Path
 import hashlib
 
-from rdkit import Chem  # type: ignore[import-untyped]
-from rdkit.Chem import rdMolDescriptors  # type: ignore[import-untyped]
-from sklearn.ensemble import RandomForestClassifier  # type: ignore[import-untyped]
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
+from sklearn.ensemble import RandomForestClassifier
 
 from app.core.config import settings
 
