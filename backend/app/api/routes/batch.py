@@ -30,18 +30,17 @@ def get_predictor() -> BBBPredictor:
     return app.state.predictor
 
 
-async def process_batch_job(
+def process_batch_job_sync(
     job_id: str,
     smiles_data: List[Dict[str, Any]],
     predictor: BBBPredictor
 ) -> None:
-    """Background task to process batch prediction job."""
-    db = get_db()
-    
+    """Synchronous wrapper for batch processing to work with BackgroundTasks."""
     try:
         logger.info(f"Starting batch job {job_id} with {len(smiles_data)} molecules")
+        db = get_db()
         
-        # Update job status to processing immediately
+        # Update job status to processing
         db.table("batch_jobs").update({
             "status": JobStatus.PROCESSING.value,
             "updated_at": datetime.utcnow().isoformat()
@@ -51,10 +50,12 @@ async def process_batch_job(
         processed_count = 0
         failed_count = 0
         
-        for item in smiles_data:
+        for i, item in enumerate(smiles_data):
             try:
                 smiles = item["smiles"]
                 molecule_name = item.get("molecule_name", "")
+                
+                logger.info(f"Processing molecule {i+1}/{len(smiles_data)}: {smiles}")
                 
                 # Make prediction
                 probability, pred_class, confidence, fingerprint = predictor.predict_single(smiles)
@@ -83,16 +84,19 @@ async def process_batch_job(
                     "error": str(e)
                 })
             
-            # Update progress every 50 molecules or on completion
-            if processed_count % 50 == 0 or processed_count == len(smiles_data):
-                progress = (processed_count / len(smiles_data)) * 100
-                db.table("batch_jobs").update({
-                    "processed_molecules": processed_count,
-                    "failed_molecules": failed_count,
-                    "progress_percentage": progress,
-                    "updated_at": datetime.utcnow().isoformat()
-                }).eq("job_id", job_id).execute()
-                logger.info(f"Job {job_id}: {processed_count}/{len(smiles_data)} molecules processed")
+            # Update progress every 10 molecules or on completion
+            if (i + 1) % 10 == 0 or (i + 1) == len(smiles_data):
+                progress = ((i + 1) / len(smiles_data)) * 100
+                try:
+                    db.table("batch_jobs").update({
+                        "processed_molecules": processed_count,
+                        "failed_molecules": failed_count,
+                        "progress_percentage": progress,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("job_id", job_id).execute()
+                    logger.info(f"Job {job_id}: {i+1}/{len(smiles_data)} molecules processed ({progress:.1f}%)")
+                except Exception as e:
+                    logger.error(f"Failed to update progress for job {job_id}: {e}")
         
         # Store results and update job status
         results_df = pd.DataFrame(results)
@@ -100,32 +104,45 @@ async def process_batch_job(
         
         # Upload results to storage
         file_name = f"batch_results_{job_id}.csv"
-        storage_response = db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
-            file_name, csv_content.encode()
-        )
+        try:
+            storage_response = db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
+                file_name, csv_content.encode()
+            )
+            logger.info(f"Results uploaded to storage: {file_name}")
+        except Exception as e:
+            logger.error(f"Failed to upload results to storage: {e}")
+            # Continue without storage upload
+            file_name = None
         
         # Update job as completed
-        db.table("batch_jobs").update({
-            "status": JobStatus.COMPLETED.value,
-            "processed_molecules": processed_count,
-            "failed_molecules": failed_count,
-            "progress_percentage": 100.0,
-            "results_file_path": file_name,
-            "completed_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("job_id", job_id).execute()
-        
-        logger.info(f"Batch job {job_id} completed successfully with {processed_count} processed and {failed_count} failed")
+        try:
+            db.table("batch_jobs").update({
+                "status": JobStatus.COMPLETED.value,
+                "processed_molecules": processed_count,
+                "failed_molecules": failed_count,
+                "progress_percentage": 100.0,
+                "results_file_path": file_name,
+                "completed_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("job_id", job_id).execute()
+            
+            logger.info(f"Batch job {job_id} completed successfully with {processed_count} processed and {failed_count} failed")
+        except Exception as e:
+            logger.error(f"Failed to update job completion status: {e}")
         
     except Exception as e:
         logger.error(f"Batch job {job_id} failed: {e}", exc_info=True)
         
         # Update job as failed
-        db.table("batch_jobs").update({
-            "status": JobStatus.FAILED.value,
-            "error_message": str(e),
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("job_id", job_id).execute()
+        try:
+            db = get_db()
+            db.table("batch_jobs").update({
+                "status": JobStatus.FAILED.value,
+                "error_message": str(e),
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("job_id", job_id).execute()
+        except Exception as db_error:
+            logger.error(f"Failed to update job failure status: {db_error}")
 
 
 @router.get("/batch_jobs", response_model=List[BatchStatusResponse])
@@ -187,7 +204,7 @@ async def batch_predict_csv(
         
         # Read and validate CSV
         content = await file.read()
-        if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+        if len(content) > 50 * 1024 * 1024:  # 50MB limit
             raise HTTPException(status_code=400, detail="File too large")
         
         df = pd.read_csv(io.StringIO(content.decode()))
@@ -196,11 +213,11 @@ async def batch_predict_csv(
         if 'smiles' not in df.columns:
             raise HTTPException(status_code=400, detail="CSV must contain 'smiles' column")
         
-        # Validate batch size
-        if len(df) > settings.MAX_BATCH_SIZE:
+        # Validate batch size - increased to 10000
+        if len(df) > 10000:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Batch size exceeds maximum of {settings.MAX_BATCH_SIZE}"
+                detail=f"Batch size exceeds maximum of 10000 molecules"
             )
         
         # Clean and prepare data
@@ -209,10 +226,13 @@ async def batch_predict_csv(
         
         smiles_data = df[['smiles', 'molecule_name']].to_dict('records')
         
+        if len(smiles_data) == 0:
+            raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
+        
         # Create batch job
         job_id = str(uuid.uuid4())
         estimated_completion = datetime.utcnow() + timedelta(
-            minutes=len(smiles_data) * 0.05  # Estimate 0.05 min per molecule (3 seconds each)
+            minutes=len(smiles_data) * 0.1  # Estimate 0.1 min per molecule (6 seconds each)
         )
         
         job_data = {
@@ -233,9 +253,9 @@ async def batch_predict_csv(
         insert_response = db.table("batch_jobs").insert(job_data).execute()
         logger.info(f"Created batch job {job_id} with {len(smiles_data)} molecules")
         
-        # Start background processing immediately
-        background_tasks.add_task(process_batch_job, job_id, smiles_data, predictor)
-        logger.info(f"Started background processing for job {job_id}")
+        # Start background processing
+        background_tasks.add_task(process_batch_job_sync, job_id, smiles_data, predictor)
+        logger.info(f"Added background task for job {job_id}")
         
         return BatchJobResponse(
             job_id=job_id,
@@ -309,6 +329,9 @@ async def download_batch_results(job_id: str) -> StreamingResponse:
         
         # Download results file
         file_path = job_data["results_file_path"]
+        if not file_path:
+            raise HTTPException(status_code=404, detail="Results file not found")
+            
         storage_response = db.storage.from_(settings.STORAGE_BUCKET_NAME).download(file_path)
         
         # Create streaming response
