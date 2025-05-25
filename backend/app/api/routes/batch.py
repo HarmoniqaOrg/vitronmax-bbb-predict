@@ -123,6 +123,39 @@ async def process_batch_job(
         }).eq("job_id", job_id).execute()
 
 
+@router.get("/batch_jobs", response_model=List[BatchStatusResponse])
+async def get_all_batch_jobs() -> List[BatchStatusResponse]:
+    """Get all batch jobs, ordered by creation date (newest first)."""
+    db = get_db()
+    
+    try:
+        response = db.table("batch_jobs").select("*").order("created_at", desc=True).limit(50).execute()
+        
+        jobs = []
+        for job_data in response.data:
+            jobs.append(BatchStatusResponse(
+                job_id=job_data["job_id"],
+                job_name=job_data.get("job_name"),
+                status=JobStatus(job_data["status"]),
+                created_at=datetime.fromisoformat(job_data["created_at"]),
+                updated_at=datetime.fromisoformat(job_data["updated_at"]),
+                total_molecules=job_data["total_molecules"],
+                processed_molecules=job_data["processed_molecules"],
+                failed_molecules=job_data["failed_molecules"],
+                progress_percentage=job_data["progress_percentage"],
+                estimated_completion_time=datetime.fromisoformat(
+                    job_data["estimated_completion_time"]
+                ) if job_data.get("estimated_completion_time") else None,
+                error_message=job_data.get("error_message")
+            ))
+        
+        return jobs
+        
+    except Exception as e:
+        logger.error(f"Failed to get batch jobs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve batch jobs")
+
+
 @router.post("/batch_predict_csv", response_model=BatchJobResponse)
 async def batch_predict_csv(
     background_tasks: BackgroundTasks,
@@ -230,6 +263,7 @@ async def get_batch_status(job_id: str) -> BatchStatusResponse:
         
         return BatchStatusResponse(
             job_id=job_data["job_id"],
+            job_name=job_data.get("job_name"),
             status=JobStatus(job_data["status"]),
             created_at=datetime.fromisoformat(job_data["created_at"]),
             updated_at=datetime.fromisoformat(job_data["updated_at"]),

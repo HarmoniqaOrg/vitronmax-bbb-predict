@@ -24,7 +24,10 @@ export interface BatchJob {
   failed_molecules: number;
   progress_percentage: number;
   estimated_completion_time?: string;
+  completed_at?: string;
   error_message?: string;
+  results_file_path?: string;
+  notify_email?: string;
 }
 
 export interface BatchUploadFormData {

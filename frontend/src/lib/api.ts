@@ -73,6 +73,12 @@ export const apiClient = {
     return response.data;
   },
 
+  // Get all batch jobs
+  getAllBatchJobs: async (): Promise<BatchJob[]> => {
+    const response = await api.get('/batch_jobs');
+    return response.data;
+  },
+
   // Download batch results
   getBatchDownloadUrl: (jobId: string): string => {
     return `${api.defaults.baseURL}/download/${jobId}`;

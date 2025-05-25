@@ -10,10 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Fingerprint, FileText, MessageSquare } from 'lucide-react';
+import PredictionResult from './PredictionResult';
 import apiClient from '@/lib/api';
 import type { SinglePredictionFormData, MoleculeResult } from '@/lib/types';
-import MoleculeRenderer from '@/components/MoleculeRenderer';
-import PredictionResult from '@/components/dashboard/PredictionResult';
 
 const SinglePredictionForm = () => {
   const { toast } = useToast();
@@ -40,6 +39,7 @@ const SinglePredictionForm = () => {
         title: 'Prediction complete',
         description: `BBB probability: ${(result.bbb_probability * 100).toFixed(1)}%`,
       });
+      
     } catch (error) {
       console.error('Prediction error:', error);
       toast({
@@ -58,28 +58,26 @@ const SinglePredictionForm = () => {
     try {
       const blob = await apiClient.generateReportFromSmiles({
         smiles: result.smiles,
-        molecule_name: result.molecule_name,
+        molecule_name: result.molecule_name
       });
       
-      // Create download link
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `bbb_report_${result.molecule_name || 'molecule'}.pdf`;
+      a.download = `${result.molecule_name || 'molecule'}_report.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
       toast({
-        title: 'Report generated',
+        title: 'Report downloaded',
         description: 'Your PDF report has been downloaded',
       });
     } catch (error) {
-      console.error('Report generation error:', error);
       toast({
         title: 'Report generation failed',
-        description: 'Unable to generate the PDF report',
+        description: 'Unable to generate the report. Please try again.',
         variant: 'destructive',
       });
     }
@@ -111,8 +109,8 @@ const SinglePredictionForm = () => {
               />
             </div>
             
-            <div className="h-40 border rounded-md overflow-hidden">
-              <MoleculeRenderer smiles={smiles} />
+            <div className="h-40 border rounded-md overflow-hidden flex items-center justify-center bg-muted">
+              <p className="text-muted-foreground">Molecule visualization for: {smiles || 'Enter SMILES'}</p>
             </div>
             
             <Button type="submit" className="w-full" disabled={isLoading}>
@@ -143,12 +141,10 @@ const SinglePredictionForm = () => {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
-                  asChild
+                  onClick={() => window.open(`/explain?smiles=${encodeURIComponent(result.smiles)}`, '_blank')}
                 >
-                  <a href={`/explain?smiles=${encodeURIComponent(result.smiles)}`}>
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    Get AI Explanation
-                  </a>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Get AI Explanation
                 </Button>
               </div>
             </div>
