@@ -1,4 +1,3 @@
-
 # Product Requirements Document (PRD)
 # VitronMax - BBB Permeability Prediction Platform
 
@@ -119,6 +118,7 @@ VitronMax is an API-first SaaS platform with a web dashboard that provides:
 - 95th-percentile latency < 800 ms
 - User feedback indicates useful explainability
 - Test coverage ≥ 80%
+  - *Note: Recent backend stabilization efforts have resolved issues with the test execution environment, enabling more reliable measurement and improvement of test coverage.*
 
 ## 6. Future Enhancements (Post-MVP)
 

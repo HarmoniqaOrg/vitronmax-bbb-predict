@@ -1,9 +1,10 @@
-
 # VitronMax API Documentation
 
 ## Overview
 
 The VitronMax API provides a comprehensive set of endpoints for predicting Blood-Brain-Barrier (BBB) permeability of molecules. The API is RESTful and returns responses in JSON format.
+
+Recent backend stabilization efforts have significantly improved API reliability, particularly in request handling, schema validation, and model interactions. For the most detailed and up-to-date schema information, please refer to the auto-generated OpenAPI documentation available at the `/docs` and `/redoc` endpoints when the API is running. This document provides a high-level overview and usage examples.
 
 Base URL: `https://api.vitronmax.com/api/v1`
 

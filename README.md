@@ -1,4 +1,3 @@
-
 # VitronMax - BBB Permeability Prediction Platform
 
 A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) permeability prediction.
@@ -46,9 +45,13 @@ A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) p
 git clone <repo-url>
 cd VitronMax
 
-# Backend setup
+# Backend setup (Python 3.11+ recommended, use a virtual environment)
 cd backend
+python -m venv .venv
+# Activate venv (e.g., source .venv/bin/activate or .venv\Scripts\activate)
+# requirements.txt contains pinned versions for model compatibility.
 pip install -r requirements.txt
+# Ensure MODEL_PATH in .env is set or default is used (see Environment Setup)
 uvicorn app.main:app --reload
 
 # Frontend setup
@@ -71,6 +74,8 @@ docker run -p 8080:8080 vitronmax
 
 ```bash
 # Backend tests
+# (Assumes virtual environment is active and MODEL_PATH is configured for tests via conftest.py or .env)
+# Tests now reliably pass; model loading issues in test environment resolved.
 pytest -q --cov=app
 
 # Frontend tests
@@ -91,15 +96,16 @@ npx playwright test
 
 ## 🔧 Environment Setup
 
-Copy `.env.example` to `.env` and configure:
+Copy `.env.example` to `.env` (located in the `backend` directory) and configure:
 
 ```env
 OPENAI_API_KEY=your_key
 SUPABASE_URL=your_url
 SUPABASE_SERVICE_KEY=your_key
-STORAGE_BUCKET_NAME=vitronmax-storage
+STORAGE_BUCKET_NAME=vitronmax-storage # Ensure this bucket exists in your Supabase project
 LOG_LEVEL=INFO
-ENV=development
+ENV=development # 'production', 'test', or 'development'
+MODEL_PATH=models/default_model.joblib # Optional: path to your trained model relative to the backend directory
 ```
 
 ## 📄 License

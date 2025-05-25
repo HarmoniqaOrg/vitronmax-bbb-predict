@@ -1,4 +1,3 @@
-
 # VitronMax Deployment Guide
 
 This guide details the steps required to deploy the VitronMax platform using Fly.io and Supabase.
@@ -27,29 +26,32 @@ This guide details the steps required to deploy the VitronMax platform using Fly
 
 ### Storage Setup
 
-1. Create a new storage bucket named `vitronmax-storage`
+1. Create a new storage bucket named `vitronmax-storage`. **Ensure this bucket is created and accessible.**
 2. Configure bucket permissions:
    - Allow `select` for authenticated users
    - Allow `insert` for authenticated users (service role)
    - Allow `update` for service role only
    - Allow `delete` for service role only
-3. Configure CORS settings to allow your frontend domain
+3. Configure CORS settings for the bucket to allow your frontend domain. **Correct CORS settings are crucial for file uploads from the frontend.**
 
 ## 2. Environment Variables
 
-Create a `.env` file in the backend directory with the following variables:
+Create a `.env` file in the backend directory (or configure these as secrets in your deployment environment, e.g., Fly.io secrets) with the following variables. **It is recommended to use Python 3.11+ for the backend deployment environment.**
 
 ```
 OPENAI_API_KEY=your_openai_api_key
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 STORAGE_BUCKET_NAME=vitronmax-storage
-FLY_API_TOKEN=your_fly_token
+# MODEL_PATH=models/default_model.joblib # Optional: Path to your trained model relative to the backend app directory. Defaults to models/default_model.joblib.
+FLY_API_TOKEN=your_fly_token # Specific to Fly.io deployment
 LOG_LEVEL=INFO
-ENV=production
+ENV=production # Ensure this is set to 'production' for deployed environments
 ```
 
 ## 3. Deploying the Backend
+
+When deploying the backend, ensure that the Python environment uses the pinned versions specified in `backend/requirements.txt`. These versions have been tested for compatibility, especially with the machine learning model.
 
 ### Initial Deployment
 
@@ -66,6 +68,7 @@ ENV=production
    flyctl secrets set STORAGE_BUCKET_NAME=vitronmax-storage
    flyctl secrets set ENV=production
    flyctl secrets set LOG_LEVEL=INFO
+   # flyctl secrets set MODEL_PATH=models/default_model.joblib # Set if using a non-default path
    ```
 4. Deploy the application:
    ```
