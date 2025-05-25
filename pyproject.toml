@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+filterwarnings = [
+    "ignore:The `update_forward_refs` method is deprecated; use `model_rebuild` instead.:DeprecationWarning:gotrue.types",
+    "ignore:The `update_forward_refs` method is deprecated; use `model_rebuild` instead.:DeprecationWarning:pydantic.main",
+]
