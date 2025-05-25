@@ -1,4 +1,3 @@
-
 """
 VitronMax FastAPI application main module.
 Provides BBB permeability prediction API endpoints.
@@ -28,18 +27,19 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan management."""
     logger.info("Starting VitronMax API server...")
-    
+
     # Initialize database
     await init_db()
-    
+
     # Load ML model
     from app.ml.predictor import BBBPredictor
+
     app.state.predictor = BBBPredictor()
     await app.state.predictor.load_model()
-    
+
     logger.info("VitronMax API server started successfully")
     yield
-    
+
     logger.info("Shutting down VitronMax API server...")
 
 
@@ -50,7 +50,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -82,7 +82,7 @@ async def health_check() -> Dict[str, Any]:
         "status": "healthy",
         "timestamp": time.time(),
         "version": "1.0.0",
-        "service": "VitronMax API"
+        "service": "VitronMax API",
     }
 
 
@@ -102,8 +102,8 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={
             "error": "Internal server error",
-            "message": "An unexpected error occurred"
-        }
+            "message": "An unexpected error occurred",
+        },
     )
 
 
@@ -113,5 +113,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8080,
         reload=settings.ENV == "development",
-        log_level=settings.LOG_LEVEL.lower()
+        log_level=settings.LOG_LEVEL.lower(),
     )

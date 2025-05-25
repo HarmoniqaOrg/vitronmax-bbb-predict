@@ -1,4 +1,3 @@
-
 """
 Pydantic models for request/response schemas.
 """
@@ -12,6 +11,7 @@ import re
 
 class JobStatus(str, Enum):
     """Batch job status enumeration."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -20,24 +20,26 @@ class JobStatus(str, Enum):
 
 class PredictionRequest(BaseModel):
     """Single molecule prediction request."""
+
     smiles: str = Field(..., description="SMILES string of the molecule")
     molecule_name: Optional[str] = Field(None, description="Optional molecule name")
-    
+
     @validator("smiles")
     def validate_smiles(cls, v):
         """Basic SMILES validation."""
         if not v or len(v.strip()) == 0:
             raise ValueError("SMILES string cannot be empty")
-        
+
         # Basic SMILES pattern check
-        if not re.match(r'^[A-Za-z0-9@+\-\[\]()=#\.\\\/\s]+$', v):
+        if not re.match(r"^[A-Za-z0-9@+\-\[\]()=#\.\\\/\s]+$", v):
             raise ValueError("Invalid characters in SMILES string")
-        
+
         return v.strip()
 
 
 class PredictionResponse(BaseModel):
     """Single molecule prediction response."""
+
     smiles: str
     molecule_name: Optional[str]
     bbb_probability: float = Field(..., ge=0.0, le=1.0)
@@ -49,12 +51,16 @@ class PredictionResponse(BaseModel):
 
 class BatchPredictionRequest(BaseModel):
     """Batch prediction job creation request."""
+
     job_name: Optional[str] = Field(None, description="Optional job name")
-    notify_email: Optional[str] = Field(None, description="Email for completion notification")
+    notify_email: Optional[str] = Field(
+        None, description="Email for completion notification"
+    )
 
 
 class BatchJobResponse(BaseModel):
     """Batch job creation response."""
+
     job_id: str
     status: JobStatus
     created_at: datetime
@@ -64,6 +70,7 @@ class BatchJobResponse(BaseModel):
 
 class BatchStatusResponse(BaseModel):
     """Batch job status response."""
+
     job_id: str
     status: JobStatus
     created_at: datetime
@@ -78,10 +85,13 @@ class BatchStatusResponse(BaseModel):
 
 class ExplainRequest(BaseModel):
     """AI explanation request."""
+
     smiles: str
     prediction_result: Optional[Dict[str, Any]] = None
-    context: Optional[str] = Field(None, description="Additional context for explanation")
-    
+    context: Optional[str] = Field(
+        None, description="Additional context for explanation"
+    )
+
     @validator("smiles")
     def validate_smiles(cls, v):
         """Basic SMILES validation."""
@@ -92,6 +102,7 @@ class ExplainRequest(BaseModel):
 
 class MoleculeData(BaseModel):
     """Molecule data for database storage."""
+
     smiles: str
     molecule_name: Optional[str]
     bbb_probability: float
@@ -103,6 +114,7 @@ class MoleculeData(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Standard error response."""
+
     error: str
     message: str
     details: Optional[Dict[str, Any]] = None

@@ -1,4 +1,3 @@
-
 """
 AI-powered explanation endpoints using OpenAI.
 """
@@ -24,16 +23,15 @@ openai.api_key = settings.OPENAI_API_KEY
 def get_predictor() -> BBBPredictor:
     """Dependency to get ML predictor instance."""
     from app.main import app
+
     return app.state.predictor
 
 
 async def generate_explanation_stream(
-    smiles: str,
-    prediction_result: dict,
-    context: str = None
+    smiles: str, prediction_result: dict, context: str = None
 ) -> AsyncGenerator[str, None]:
     """Generate streaming AI explanation for BBB prediction."""
-    
+
     # Prepare system prompt
     system_prompt = """You are a computational chemist and AI expert specializing in blood-brain barrier (BBB) permeability prediction. 
 
@@ -47,7 +45,7 @@ Focus on:
 5. Practical implications for drug development
 
 Be concise but informative. Use technical terms appropriately but explain them when necessary."""
-    
+
     # Prepare user message
     user_message = f"""
     Please explain the BBB permeability prediction for this molecule:
@@ -61,27 +59,27 @@ Be concise but informative. Use technical terms appropriately but explain them w
     
     Explain why this molecule received this prediction and what structural features are most relevant.
     """
-    
+
     try:
         # Create OpenAI streaming completion
         response = await openai.ChatCompletion.acreate(
             model=settings.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
+                {"role": "user", "content": user_message},
             ],
             stream=True,
             temperature=0.3,
-            max_tokens=1000
+            max_tokens=1000,
         )
-        
+
         async for chunk in response:
             if chunk.choices[0].delta.get("content"):
                 content = chunk.choices[0].delta.content
                 yield f"data: {json.dumps({'content': content})}\n\n"
-        
+
         yield f"data: {json.dumps({'done': True})}\n\n"
-        
+
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
         error_msg = "Sorry, I encountered an error while generating the explanation. Please try again."
@@ -90,51 +88,48 @@ Be concise but informative. Use technical terms appropriately but explain them w
 
 @router.post("/explain")
 async def explain_prediction(
-    request: ExplainRequest,
-    predictor: BBBPredictor = Depends(get_predictor)
+    request: ExplainRequest, predictor: BBBPredictor = Depends(get_predictor)
 ) -> StreamingResponse:
     """
     Generate AI-powered explanation for BBB permeability prediction.
-    
+
     Returns a streaming response with the explanation content.
     """
-    
+
     try:
         # If no prediction result provided, generate one
         if not request.prediction_result:
             probability, pred_class, confidence, fingerprint = predictor.predict_single(
                 request.smiles
             )
-            
+
             prediction_result = {
-                'bbb_probability': probability,
-                'prediction_class': pred_class,
-                'confidence_score': confidence
+                "bbb_probability": probability,
+                "prediction_class": pred_class,
+                "confidence_score": confidence,
             }
         else:
             prediction_result = request.prediction_result
-        
+
         logger.info(f"Generating explanation for SMILES: {request.smiles}")
-        
+
         # Generate streaming explanation
         return StreamingResponse(
             generate_explanation_stream(
-                request.smiles,
-                prediction_result,
-                request.context
+                request.smiles, prediction_result, request.context
             ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Content-Type": "text/event-stream"
-            }
+                "Content-Type": "text/event-stream",
+            },
         )
-        
+
     except ValueError as e:
         logger.warning(f"Invalid input for explanation: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     except Exception as e:
         logger.error(f"Explanation generation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate explanation")
@@ -143,7 +138,7 @@ async def explain_prediction(
 @router.get("/explain/sample")
 async def get_sample_explanation() -> dict:
     """Get a sample explanation for demonstration purposes."""
-    
+
     sample_explanation = {
         "smiles": "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
         "explanation": """
@@ -168,7 +163,7 @@ async def get_sample_explanation() -> dict:
         though its primary therapeutic targets are in peripheral tissues.
         """,
         "confidence": 0.72,
-        "prediction": "permeable"
+        "prediction": "permeable",
     }
-    
+
     return sample_explanation

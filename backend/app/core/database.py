@@ -1,4 +1,3 @@
-
 """
 Database connection and initialization.
 """
@@ -17,17 +16,14 @@ supabase: Optional[Client] = None
 async def init_db() -> None:
     """Initialize database connection."""
     global supabase
-    
+
     try:
-        supabase = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY
-        )
-        
+        supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
         # Test connection
         response = supabase.table("batch_jobs").select("id").limit(1).execute()
         logger.info("Database connection established successfully")
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
         raise
