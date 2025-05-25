@@ -28,7 +28,7 @@ jobs:
       - name: Lint with ruff
         run: |
           cd backend
-          ruff app/ tests/
+          ruff check app/ tests/
       - name: Lint with flake8
         run: |
           cd backend
