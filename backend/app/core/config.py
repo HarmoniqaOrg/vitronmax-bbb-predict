@@ -3,7 +3,7 @@ Application configuration settings.
 """
 
 from typing import List, Optional
-from pydantic import AnyHttpUrl, PostgresDsn, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,12 +28,12 @@ class Settings(BaseSettings):
         return v
 
     # Database and Storage settings
-    SUPABASE_URL: str
-    SUPABASE_SERVICE_KEY: str
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
     STORAGE_BUCKET_NAME: str = "vitronmax-storage"
 
     # OpenAI settings
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Model settings

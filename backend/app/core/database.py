@@ -4,7 +4,7 @@ Database connection and initialization.
 
 import logging
 from typing import Optional
-from supabase import create_client, Client
+from supabase import create_client, Client  # type: ignore[attr-defined]
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,15 @@ async def init_db() -> None:
     """Initialize database connection."""
     global supabase
 
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_KEY:
+        logger.error(
+            "Supabase URL or Service Key not configured. Database will not be initialized."
+        )
+        supabase = None
+        return
+
     try:
+        # At this point, SUPABASE_URL and SUPABASE_SERVICE_KEY are known to be str
         supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
         # Test connection

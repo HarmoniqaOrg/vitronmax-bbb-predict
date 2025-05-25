@@ -249,7 +249,7 @@ async def batch_predict_csv(
 
         smiles_data: List[Dict[str, Any]] = df[["smiles", "molecule_name"]].to_dict(
             orient="records"
-        )
+        )  # type: ignore[assignment]
 
         if not smiles_data:
             raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
