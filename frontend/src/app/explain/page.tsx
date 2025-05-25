@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -88,12 +87,13 @@ export default function ExplainPage() {
         }
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error getting explanation:', err);
-      setError(err.message || 'Failed to get explanation. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to get explanation. Please try again.';
+      setError(errorMessage);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to get explanation',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -109,7 +109,7 @@ export default function ExplainPage() {
       const sample = await apiClient.getSampleExplanation();
       setExplanation(sample.explanation);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading sample explanation:', err);
       toast({
         title: 'Error',
@@ -205,8 +205,8 @@ export default function ExplainPage() {
                 ) : !isLoading && !error ? (
                   <div className="text-center py-12">
                     <p className="text-muted-foreground">
-                      Enter a SMILES string and click "Generate Explanation" to get an AI-powered
-                      analysis of the molecule's BBB permeability factors.
+                      Enter a SMILES string and click &quot;Generate Explanation&quot; to get an AI-powered
+                      analysis of the molecule&apos;s BBB permeability factors.
                     </p>
                   </div>
                 ) : null}

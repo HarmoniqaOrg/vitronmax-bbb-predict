@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -53,11 +52,17 @@ const BatchUploadForm = () => {
       reset();
       setSelectedFile(null);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload failed:', error);
+      let description = 'Failed to submit batch job';
+      if (error && typeof error === 'object' && 'response' in error && 
+          error.response && typeof error.response === 'object' && 'data' in error.response &&
+          error.response.data && typeof error.response.data === 'object' && 'detail' in error.response.data) {
+        description = (error.response.data as { detail: string }).detail;
+      }
       toast({
         title: 'Upload failed',
-        description: error.response?.data?.detail || 'Failed to submit batch job',
+        description: description,
         variant: 'destructive',
       });
     } finally {
@@ -127,7 +132,7 @@ const BatchUploadForm = () => {
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription>
-                  Upload a CSV file with 'smiles' column and optional 'molecule_name' column
+                  Upload a CSV file with &apos;smiles&apos; column and optional &apos;molecule_name&apos; column
                 </AlertDescription>
               </Alert>
             </div>

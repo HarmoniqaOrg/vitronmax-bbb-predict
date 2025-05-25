@@ -1,5 +1,3 @@
-
-import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Fingerprint, Database, Cpu, FileText, Zap, MessageSquare } from 'lucide-react';
 

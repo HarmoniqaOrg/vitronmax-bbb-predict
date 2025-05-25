@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -74,7 +73,8 @@ const SinglePredictionForm = () => {
         title: 'Report downloaded',
         description: 'Your PDF report has been downloaded',
       });
-    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
       toast({
         title: 'Report generation failed',
         description: 'Unable to generate the report. Please try again.',
@@ -153,7 +153,7 @@ const SinglePredictionForm = () => {
               <Fingerprint className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <h3 className="text-lg font-medium mb-2">No Prediction Yet</h3>
               <p className="text-sm text-muted-foreground max-w-xs">
-                Enter a SMILES string and click "Predict" to analyze BBB permeability
+                Enter a SMILES string and click &quot;Predict&quot; to analyze BBB permeability
               </p>
             </div>
           )}

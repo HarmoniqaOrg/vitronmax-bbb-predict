@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,7 @@ const Hero = () => {
         </h1>
         
         <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto mb-10">
-          Accelerate your drug discovery pipeline with VitronMax's state-of-the-art
+          Accelerate your drug discovery pipeline with VitronMax&apos;s state-of-the-art
           in-silico BBB permeability screening platform.
         </p>
         

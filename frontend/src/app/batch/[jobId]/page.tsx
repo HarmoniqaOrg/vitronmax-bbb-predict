@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -22,41 +21,45 @@ export default function BatchJobPage({ params }: { params: { jobId: string } }) 
   const [job, setJob] = useState<BatchJob | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
-  const loadJobStatus = async () => {
+  const loadJobStatus = useCallback(async () => {
     try {
-      setLoading(true);
       const data = await apiClient.getBatchStatus(jobId);
       setJob(data);
       setError(null);
-      
-      // Stop polling if job is completed or failed
-      if (data.status === 'completed' || data.status === 'failed') {
-        if (pollingInterval) {
-          clearInterval(pollingInterval);
-          setPollingInterval(null);
-        }
-      }
+      return data.status;
     } catch (err) {
       setError('Failed to load job status');
       console.error('Error loading job status:', err);
+      return 'failed';
     } finally {
-      setLoading(false);
     }
-  };
+  }, [jobId]);
 
   useEffect(() => {
-    loadJobStatus();
-    
-    // Set up polling for in-progress jobs
-    const interval = setInterval(loadJobStatus, 5000);
-    setPollingInterval(interval);
-    
-    return () => {
-      if (interval) clearInterval(interval);
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const fetchAndPoll = async () => {
+      setLoading(true);
+      const currentStatus = await loadJobStatus();
+      setLoading(false);
+
+      if (currentStatus !== 'completed' && currentStatus !== 'failed') {
+        intervalId = setInterval(async () => {
+          const status = await loadJobStatus();
+          if (status === 'completed' || status === 'failed') {
+            if (intervalId) clearInterval(intervalId);
+          }
+        }, 5000);
+      }
     };
-  }, [jobId]);
+
+    fetchAndPoll();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [jobId, loadJobStatus]);
 
   const handleDownload = () => {
     if (!job || job.status !== 'completed') return;

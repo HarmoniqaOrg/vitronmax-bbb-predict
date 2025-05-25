@@ -1,4 +1,3 @@
-
 /**
  * Type definitions for VitronMax frontend
  */
@@ -50,7 +49,7 @@ export interface ExplainRequest {
 export interface ApiError {
   error: string;
   message: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 export interface ModelInfo {
