@@ -5,10 +5,10 @@ pydantic-settings>=2.0.0 # Add for Pydantic v2 BaseSettings
 python-multipart>=0.0.6
 pandas>=2.1.0
 pandas-stubs>=2.0.0 # Add for pandas type hints
-numpy>=1.24.0
-scikit-learn>=1.3.0
-joblib>=1.3.0
-rdkit>=2022.9.5
+numpy==1.24.4
+scikit-learn==1.3.2
+joblib==1.3.2
+rdkit==2022.9.5
 supabase>=2.15.2
 openai>=1.0.0
 reportlab>=4.0.0
