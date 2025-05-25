@@ -52,7 +52,7 @@ class BBBPredictor:
 
         # Generate dummy training data
         np.random.seed(42)
-        X_dummy: NDArray[np.float_] = np.random.random((1000, settings.FP_NBITS))
+        X_dummy: NDArray[float] = np.random.random((1000, settings.FP_NBITS))
         y_dummy: NDArray[np.int_] = np.random.choice([0, 1], size=1000, p=[0.3, 0.7])
 
         self.model = RandomForestClassifier(
@@ -141,7 +141,7 @@ class BBBPredictor:
             raise RuntimeError("Model not loaded")
         assert self.model is not None  # Ensure model is not None for Mypy
 
-        importances: NDArray[np.float_] = self.model.feature_importances_
+        importances: NDArray[float] = self.model.feature_importances_
         indices: NDArray[np.int_] = np.argsort(importances)[::-1][:top_n]
 
         return [(int(idx), float(importances[idx])) for idx in indices]

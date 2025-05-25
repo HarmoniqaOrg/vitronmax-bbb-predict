@@ -4,7 +4,7 @@ Database connection and initialization.
 
 import logging
 from typing import Optional
-from supabase import create_client, Client  # type: ignore[attr-defined]
+from supabase import create_client, Client
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
