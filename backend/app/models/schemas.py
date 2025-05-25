@@ -68,12 +68,14 @@ class BatchJobResponse(BaseModel):
     created_at: datetime
     estimated_completion_time: Optional[datetime]
     total_molecules: int
+    detail: Optional[str] = None  # Added for messages
 
 
 class BatchStatusResponse(BaseModel):
     """Batch job status response."""
 
     job_id: str
+    job_name: Optional[str] = None  # Added
     status: JobStatus
     created_at: datetime
     updated_at: datetime
@@ -82,6 +84,7 @@ class BatchStatusResponse(BaseModel):
     failed_molecules: int
     progress_percentage: float
     estimated_completion_time: Optional[datetime]
+    results_file_path: Optional[str] = None  # Added
     error_message: Optional[str]
 
 
@@ -90,7 +93,9 @@ class ExplainRequest(BaseModel):
 
     smiles: str
     prediction_result: Optional[Dict[str, Any]] = None
-    context: Optional[str] = Field(None, description="Additional context for explanation")
+    context: Optional[str] = Field(
+        None, description="Additional context for explanation"
+    )
 
     @field_validator("smiles", mode="before")
     @classmethod

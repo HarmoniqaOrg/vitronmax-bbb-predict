@@ -4,7 +4,7 @@ AI-powered explanation endpoints using OpenAI.
 
 import logging
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
@@ -24,11 +24,13 @@ def get_predictor() -> BBBPredictor:
     """Dependency to get ML predictor instance."""
     from app.main import app
 
+    # Ensure predictor is of the correct type for Mypy
+    assert isinstance(app.state.predictor, BBBPredictor)
     return app.state.predictor
 
 
 async def generate_explanation_stream(
-    smiles: str, prediction_result: dict, context: str = None
+    smiles: str, prediction_result: Dict[str, Any], context: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """Generate streaming AI explanation for BBB prediction."""
 
@@ -123,7 +125,9 @@ async def explain_prediction(
         # Generate streaming explanation
         return StreamingResponse(
             generate_explanation_stream(
-                request.smiles, prediction_result, request.context
+                request.smiles,
+                prediction_result,
+                request.context or "",  # Ensure context is str
             ),
             media_type="text/event-stream",
             headers={
@@ -145,7 +149,7 @@ async def explain_prediction(
 
 
 @router.get("/explain/sample")
-async def get_sample_explanation() -> dict:
+async def get_sample_explanation() -> Dict[str, Any]:
     """Get a sample explanation for demonstration purposes."""
 
     sample_explanation = {

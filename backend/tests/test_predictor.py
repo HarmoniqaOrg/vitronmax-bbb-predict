@@ -4,11 +4,12 @@ Tests for BBB predictor functionality.
 
 import pytest
 import numpy as np
+import pytest_asyncio
 from app.ml.predictor import BBBPredictor
 
 
-@pytest.fixture
-async def predictor():
+@pytest_asyncio.fixture
+async def predictor() -> BBBPredictor:
     """Create predictor instance for testing."""
     pred = BBBPredictor()
     await pred.load_model()
@@ -19,12 +20,12 @@ class TestBBBPredictor:
     """Test cases for BBB predictor."""
 
     @pytest.mark.asyncio
-    async def test_model_loading(self, predictor):
+    async def test_model_loading(self, predictor: BBBPredictor) -> None:
         """Test model loading."""
         assert predictor.is_loaded
         assert predictor.model is not None
 
-    def test_smiles_to_fingerprint(self, predictor):
+    def test_smiles_to_fingerprint(self, predictor: BBBPredictor) -> None:
         """Test SMILES to fingerprint conversion."""
         smiles = "CCO"  # ethanol
         fp = predictor.smiles_to_fingerprint(smiles)
@@ -33,14 +34,14 @@ class TestBBBPredictor:
         assert fp.shape == (2048,)  # Default fingerprint size
         assert fp.dtype == bool or fp.dtype == int
 
-    def test_invalid_smiles(self, predictor):
+    def test_invalid_smiles(self, predictor: BBBPredictor) -> None:
         """Test handling of invalid SMILES."""
         invalid_smiles = "INVALID_SMILES_123"
 
         with pytest.raises(ValueError):
             predictor.smiles_to_fingerprint(invalid_smiles)
 
-    def test_predict_single(self, predictor):
+    def test_predict_single(self, predictor: BBBPredictor) -> None:
         """Test single molecule prediction."""
         smiles = "CCO"  # ethanol
 
@@ -53,7 +54,7 @@ class TestBBBPredictor:
         assert 0.0 <= confidence <= 1.0
         assert isinstance(fingerprint, np.ndarray)
 
-    def test_predict_batch(self, predictor):
+    def test_predict_batch(self, predictor: BBBPredictor) -> None:
         """Test batch prediction."""
         smiles_list = ["CCO", "CC(=O)O", "c1ccccc1"]  # ethanol, acetic acid, benzene
 
@@ -67,7 +68,7 @@ class TestBBBPredictor:
             assert pred_class in ["permeable", "non_permeable", "unknown"]
             assert 0.0 <= confidence <= 1.0
 
-    def test_fingerprint_hash(self, predictor):
+    def test_fingerprint_hash(self, predictor: BBBPredictor) -> None:
         """Test fingerprint hashing."""
         smiles = "CCO"
         fp = predictor.smiles_to_fingerprint(smiles)
@@ -76,7 +77,7 @@ class TestBBBPredictor:
         assert isinstance(hash_val, str)
         assert len(hash_val) == 32  # MD5 hash length
 
-    def test_feature_importance(self, predictor):
+    def test_feature_importance(self, predictor: BBBPredictor) -> None:
         """Test feature importance retrieval."""
         importance = predictor.get_feature_importance(top_n=5)
 
@@ -87,7 +88,7 @@ class TestBBBPredictor:
 
 
 @pytest.mark.asyncio
-async def test_model_not_loaded():
+async def test_model_not_loaded() -> None:
     """Test behavior when model is not loaded."""
     predictor = BBBPredictor()
 

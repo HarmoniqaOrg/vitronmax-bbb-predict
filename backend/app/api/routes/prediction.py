@@ -5,6 +5,7 @@ Single molecule prediction endpoints.
 import logging
 import time
 from fastapi import APIRouter, HTTPException, Depends
+from typing import Dict, Any
 from app.models.schemas import PredictionRequest, PredictionResponse
 from app.ml.predictor import BBBPredictor
 
@@ -16,6 +17,8 @@ def get_predictor() -> BBBPredictor:
     """Dependency to get ML predictor instance."""
     from app.main import app
 
+    # Ensure predictor is of the correct type for Mypy
+    assert isinstance(app.state.predictor, BBBPredictor)
     return app.state.predictor
 
 
@@ -69,7 +72,9 @@ async def predict_fingerprint(
 
 
 @router.get("/model/info")
-async def get_model_info(predictor: BBBPredictor = Depends(get_predictor)) -> dict:
+async def get_model_info(
+    predictor: BBBPredictor = Depends(get_predictor),
+) -> Dict[str, Any]:
     """Get information about the loaded ML model."""
     try:
         if not predictor.is_loaded:

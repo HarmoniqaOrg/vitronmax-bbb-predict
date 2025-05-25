@@ -11,7 +11,9 @@ import argparse
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from supabase import create_client
+from supabase import create_client  # type: ignore[attr-defined]
+from supabase.client import Client  # Import Client for type hinting
+from typing import List, Optional, Tuple
 
 # Load environment variables
 load_dotenv()
@@ -27,7 +29,7 @@ DEFAULT_RETENTION_DAYS = 30
 DEFAULT_BATCH_SIZE = 100
 
 
-def connect_to_supabase():
+def connect_to_supabase() -> Optional[Client]:
     """Connect to Supabase client."""
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -43,7 +45,9 @@ def connect_to_supabase():
         return None
 
 
-def get_files_to_purge(supabase, bucket_name, retention_days):
+def get_files_to_purge(
+    supabase: Client, bucket_name: str, retention_days: int
+) -> List[str]:
     """Get list of files older than retention period."""
     cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
     cutoff_str = cutoff_date.isoformat()
@@ -76,7 +80,9 @@ def get_files_to_purge(supabase, bucket_name, retention_days):
         return []
 
 
-def purge_files(supabase, bucket_name, file_paths, batch_size):
+def purge_files(
+    supabase: Client, bucket_name: str, file_paths: List[str], batch_size: int
+) -> Tuple[int, int]:
     """Delete files in batches."""
     success_count = 0
     error_count = 0
@@ -101,7 +107,7 @@ def purge_files(supabase, bucket_name, file_paths, batch_size):
     return success_count, error_count
 
 
-def main():
+def main() -> int:
     """Main script function."""
     parser = argparse.ArgumentParser(description="Purge old CSV files from storage")
     parser.add_argument(

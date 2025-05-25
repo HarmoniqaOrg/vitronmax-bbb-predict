@@ -2,10 +2,10 @@
 Application configuration settings.
 """
 
-import os
-from typing import Optional, List
+from typing import List
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -31,22 +31,24 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str
     STORAGE_BUCKET_NAME: str = "vitronmax-storage"
-    
-    # Application Settings
-    LOG_LEVEL: str = "INFO"
-    ENV: str = "development"
-    
-    # Batch processing limits
-    MAX_BATCH_SIZE: int = 10000  # Increased from 1000 to 10000
-    MAX_FILE_SIZE_MB: int = 50   # 50MB file size limit
-    
+
+    # OpenAI settings
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     # Model settings
+    MODEL_PATH: str = "models/default_model.joblib"
     MODEL_VERSION: str = "v1.0"
+    FP_NBITS: int = 2048
+    FP_RADIUS: int = 2
+
+    # Batch processing limits
+    MAX_BATCH_SIZE: int = 10000
+    MAX_FILE_SIZE_MB: int = 50
+    ESTIMATED_TIME_PER_MOLECULE: float = 0.1
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=True,
-        extra="ignore"
+        env_file=".env", case_sensitive=True, extra="ignore"
     )
 
 

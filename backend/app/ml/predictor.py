@@ -3,15 +3,17 @@ BBB permeability prediction using Random Forest and Morgan fingerprints.
 """
 
 import logging
-import joblib
+import joblib  # type: ignore[import-untyped]
 import numpy as np
+from numpy.typing import NDArray
 from typing import List, Tuple, Optional
+
 from pathlib import Path
 import hashlib
 
-from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
-from sklearn.ensemble import RandomForestClassifier
+from rdkit import Chem  # type: ignore[import-untyped]
+from rdkit.Chem import rdMolDescriptors  # type: ignore[import-untyped]
+from sklearn.ensemble import RandomForestClassifier  # type: ignore[import-untyped]
 
 from app.core.config import settings
 
@@ -21,7 +23,7 @@ logger = logging.getLogger(__name__)
 class BBBPredictor:
     """Blood-Brain-Barrier permeability predictor."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.model: Optional[RandomForestClassifier] = None
         self.is_loaded = False
 
@@ -50,15 +52,15 @@ class BBBPredictor:
 
         # Generate dummy training data
         np.random.seed(42)
-        X_dummy = np.random.random((1000, settings.FP_NBITS))
-        y_dummy = np.random.choice([0, 1], size=1000, p=[0.3, 0.7])
+        X_dummy: NDArray[np.float_] = np.random.random((1000, settings.FP_NBITS))
+        y_dummy: NDArray[np.int_] = np.random.choice([0, 1], size=1000, p=[0.3, 0.7])
 
         self.model = RandomForestClassifier(
             n_estimators=100, random_state=42, n_jobs=-1
         )
         self.model.fit(X_dummy, y_dummy)
 
-    def smiles_to_fingerprint(self, smiles: str) -> np.ndarray:
+    def smiles_to_fingerprint(self, smiles: str) -> NDArray[np.int_]:
         """Convert SMILES to Morgan fingerprint."""
         try:
             mol = Chem.MolFromSmiles(smiles)
@@ -71,19 +73,19 @@ class BBBPredictor:
             )
 
             # Convert to numpy array
-            fp_array = np.array(list(fp))
+            fp_array: NDArray[np.int_] = np.array(list(fp), dtype=np.int_)
             return fp_array
 
         except Exception as e:
             logger.error(f"Error generating fingerprint for {smiles}: {e}")
             raise
 
-    def calculate_fingerprint_hash(self, fingerprint: np.ndarray) -> str:
+    def calculate_fingerprint_hash(self, fingerprint: NDArray[np.int_]) -> str:
         """Calculate hash of fingerprint for caching."""
-        fp_bytes = fingerprint.tobytes()
+        fp_bytes: bytes = fingerprint.tobytes()
         return hashlib.md5(fp_bytes).hexdigest()
 
-    def predict_single(self, smiles: str) -> Tuple[float, str, float, np.ndarray]:
+    def predict_single(self, smiles: str) -> Tuple[float, str, float, NDArray[np.int_]]:
         """
         Predict BBB permeability for a single molecule.
 
@@ -92,6 +94,7 @@ class BBBPredictor:
         """
         if not self.is_loaded:
             raise RuntimeError("Model not loaded")
+        assert self.model is not None  # Ensure model is not None for Mypy
 
         # Generate fingerprint
         fingerprint = self.smiles_to_fingerprint(smiles)
@@ -112,12 +115,13 @@ class BBBPredictor:
 
     def predict_batch(
         self, smiles_list: List[str]
-    ) -> List[Tuple[float, str, float, np.ndarray]]:
+    ) -> List[Tuple[float, str, float, NDArray[np.int_]]]:
         """Predict BBB permeability for multiple molecules."""
         if not self.is_loaded:
             raise RuntimeError("Model not loaded")
+        assert self.model is not None  # Ensure model is not None for Mypy
 
-        results = []
+        results: List[Tuple[float, str, float, NDArray[np.int_]]] = []
         for smiles in smiles_list:
             try:
                 result = self.predict_single(smiles)
@@ -125,7 +129,9 @@ class BBBPredictor:
             except Exception as e:
                 logger.warning(f"Failed to predict for {smiles}: {e}")
                 # Return default values for failed predictions
-                results.append((0.0, "unknown", 0.0, np.zeros(settings.FP_NBITS)))
+                results.append(
+                    (0.0, "unknown", 0.0, np.zeros(settings.FP_NBITS, dtype=np.int_))
+                )
 
         return results
 
@@ -133,8 +139,9 @@ class BBBPredictor:
         """Get top N most important features from the model."""
         if not self.is_loaded:
             raise RuntimeError("Model not loaded")
+        assert self.model is not None  # Ensure model is not None for Mypy
 
-        importances = self.model.feature_importances_
-        indices = np.argsort(importances)[::-1][:top_n]
+        importances: NDArray[np.float_] = self.model.feature_importances_
+        indices: NDArray[np.int_] = np.argsort(importances)[::-1][:top_n]
 
         return [(int(idx), float(importances[idx])) for idx in indices]

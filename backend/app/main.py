@@ -6,9 +6,9 @@ Provides BBB permeability prediction API endpoints.
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, AsyncGenerator, Callable, Awaitable
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan management."""
     logger.info("Starting VitronMax API server...")
 
@@ -65,7 +65,9 @@ app.add_middleware(
 
 # Request timing middleware
 @app.middleware("http")
-async def add_process_time_header(request, call_next):
+async def add_process_time_header(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Add processing time to response headers."""
     start_time = time.time()
     response = await call_next(request)
@@ -95,7 +97,7 @@ app.include_router(explain.router, prefix="/api/v1", tags=["explain"])
 
 # Global exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global exception handler for unhandled errors."""
     logger.error(f"Unhandled error: {exc}", exc_info=True)
     return JSONResponse(

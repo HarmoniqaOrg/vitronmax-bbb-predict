@@ -6,6 +6,7 @@ import pytest
 import os
 import sys
 from pathlib import Path
+from typing import Iterator
 
 # Add backend to path
 backend_path = Path(__file__).parent.parent
@@ -18,12 +19,14 @@ os.environ["OPENAI_API_KEY"] = "mock_key"
 os.environ["STORAGE_BUCKET_NAME"] = "test-bucket"
 os.environ["ENV"] = "test"
 os.environ["LOG_LEVEL"] = "ERROR"
+os.environ["MODEL_PATH"] = "models/test_model.joblib"
 
 # Remove potentially problematic env vars for testing
 os.environ.pop("FLY_API_TOKEN", None)
 
+
 @pytest.fixture(scope="session", autouse=True)
-def mock_supabase():
+def mock_supabase() -> Iterator[None]:
     """Mock Supabase client."""
     from unittest.mock import patch, MagicMock
 
@@ -66,7 +69,7 @@ def mock_supabase():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mock_openai():
+def mock_openai() -> Iterator[None]:
     """Mock OpenAI client."""
     from unittest.mock import patch, MagicMock, AsyncMock
 

@@ -2,16 +2,22 @@
 Tests for API endpoints.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from typing import Iterator
 
-client = TestClient(app)
+
+@pytest.fixture(scope="module")
+def client() -> Iterator[TestClient]:
+    with TestClient(app) as c:
+        yield c
 
 
 class TestHealthCheck:
     """Test health check endpoint."""
 
-    def test_health_check(self):
+    def test_health_check(self, client: TestClient) -> None:
         """Test health check endpoint."""
         response = client.get("/healthz")
         assert response.status_code == 200
@@ -21,7 +27,7 @@ class TestHealthCheck:
 class TestPredictionAPI:
     """Test prediction endpoint."""
 
-    def test_predict_fp_success(self):
+    def test_predict_fp_success(self, client: TestClient) -> None:
         """Test successful prediction with valid SMILES."""
         response = client.post(
             "/api/v1/predict_fp", json={"smiles": "CCO", "molecule_name": "ethanol"}
@@ -41,19 +47,19 @@ class TestPredictionAPI:
         assert 0 <= data["confidence_score"] <= 1
         assert data["processing_time_ms"] > 0
 
-    def test_invalid_smiles(self):
+    def test_invalid_smiles(self, client: TestClient) -> None:
         """Test behavior with invalid SMILES."""
         response = client.post(
             "/api/v1/predict_fp", json={"smiles": "INVALID_SMILES_123"}
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
-    def test_empty_smiles(self):
+    def test_empty_smiles(self, client: TestClient) -> None:
         """Test behavior with empty SMILES."""
         response = client.post("/api/v1/predict_fp", json={"smiles": ""})
         assert response.status_code == 422
 
-    def test_model_info(self):
+    def test_model_info(self, client: TestClient) -> None:
         """Test model info endpoint."""
         response = client.get("/api/v1/model/info")
         assert response.status_code == 200
@@ -70,7 +76,7 @@ class TestPredictionAPI:
 class TestExplainAPI:
     """Test explain endpoint."""
 
-    def test_explain_sample(self):
+    def test_explain_sample(self, client: TestClient) -> None:
         """Test sample explanation endpoint."""
         response = client.get("/api/v1/explain/sample")
         assert response.status_code == 200

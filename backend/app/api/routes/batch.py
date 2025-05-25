@@ -6,7 +6,7 @@ import logging
 import uuid
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 import io
@@ -29,6 +29,8 @@ def get_predictor() -> BBBPredictor:
     """Dependency to get ML predictor instance."""
     from app.main import app
 
+    # Ensure predictor is of the correct type for Mypy
+    assert isinstance(app.state.predictor, BBBPredictor)
     return app.state.predictor
 
 
@@ -118,17 +120,19 @@ async def process_batch_job(
         csv_content = results_df.to_csv(index=False)
 
         # Upload results to storage
-        file_name = f"batch_results_{job_id}.csv"
+        results_file_storage_path: Optional[str] = f"batch_results_{job_id}.csv"
         try:
             db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
-                file_name, csv_content.encode()
+                results_file_storage_path, csv_content.encode()
             )
-            logger.info(f"Results for job {job_id} uploaded to storage: {file_name}")
+            logger.info(
+                f"Results for job {job_id} uploaded to storage: {results_file_storage_path}"
+            )
         except Exception as e_storage:
             logger.error(
                 f"Failed to upload results to storage for job {job_id}: {e_storage}"
             )
-            file_name = None  # Continue without storage upload if it fails
+            results_file_storage_path = None
 
         # Update job as completed
         try:
@@ -138,7 +142,7 @@ async def process_batch_job(
                     "processed_molecules": processed_count,
                     "failed_molecules": failed_count,
                     "progress_percentage": 100.0,
-                    "results_file_path": file_name,  # Might be None if upload failed
+                    "results_file_path": results_file_storage_path,
                     "completed_at": datetime.utcnow().isoformat(),
                     "updated_at": datetime.utcnow().isoformat(),
                 }
@@ -213,9 +217,9 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
 
 @router.post("/batch_predict_csv", response_model=BatchJobResponse)
 async def batch_predict_csv(
+    background_tasks: BackgroundTasks,
     request: BatchPredictionRequest = Depends(),  # For job_name
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = Depends(),
     predictor: BBBPredictor = Depends(get_predictor),
     db: Any = Depends(get_db),
 ) -> BatchJobResponse:
@@ -227,7 +231,7 @@ async def batch_predict_csv(
         # Validate required columns
         if "smiles" not in df.columns:
             raise HTTPException(
-                status_code=400, detail="CSV must contain 'smiles' column"
+                status_code=400, detail="CSV must contain a 'smiles' column"
             )
 
         # Validate batch size
@@ -243,7 +247,9 @@ async def batch_predict_csv(
             ""
         )  # Ensure column exists even if not in CSV
 
-        smiles_data = df[["smiles", "molecule_name"]].to_dict("records")
+        smiles_data: List[Dict[str, Any]] = df[["smiles", "molecule_name"]].to_dict(
+            orient="records"
+        )  # type: ignore[assignment]
 
         if not smiles_data:
             raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
@@ -271,16 +277,23 @@ async def batch_predict_csv(
         db.table("batch_jobs").insert(job_data).execute()
 
         # Start background processing
-        background_tasks.add_task(process_batch_job, job_id, smiles_data, predictor)
+        chunk_size = 100  # Process 100 molecules per task
+        for i in range(0, len(smiles_data), chunk_size):
+            chunk_smiles_data: List[Dict[str, Any]] = smiles_data[i : i + chunk_size]
+            background_tasks.add_task(
+                process_batch_job, job_id, chunk_smiles_data, predictor
+            )
 
+        created_at = datetime.utcnow()
         logger.info(f"Created batch job {job_id} with {len(smiles_data)} molecules")
 
         return BatchJobResponse(
             job_id=job_id,
             status=JobStatus.PENDING,
-            message="Batch job created successfully",
+            created_at=created_at,
             estimated_completion_time=estimated_completion,
             total_molecules=len(smiles_data),
+            detail="Batch job created and queued for processing.",
         )
     except HTTPException:  # Re-raise HTTP exceptions
         raise
@@ -333,7 +346,9 @@ async def get_batch_status(
 
 
 @router.get("/download_batch_results/{job_id}")
-async def download_batch_results(job_id: str, db: Any = Depends(get_db)):
+async def download_batch_results(
+    job_id: str, db: Any = Depends(get_db)
+) -> StreamingResponse:
     """Download results CSV for a completed batch job."""
     try:
         response = (
