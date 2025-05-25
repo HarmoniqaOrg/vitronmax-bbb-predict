@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +21,7 @@ const RecentActivityList = () => {
       console.log('Fetching batch jobs from API...');
       const jobs = await apiClient.getAllBatchJobs();
       console.log('Received batch jobs:', jobs);
-      setBatchJobs(jobs.slice(0, 5)); // Show only recent 5 jobs
+      setBatchJobs(Array.isArray(jobs) ? jobs.slice(0, 5) : []); // Show only recent 5 jobs
     } catch (err) {
       console.error('Failed to fetch batch jobs:', err);
       setError('Failed to load recent activity');

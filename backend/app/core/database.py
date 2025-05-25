@@ -29,7 +29,7 @@ async def init_db() -> None:
         supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
         # Test connection
-        supabase.table("batch_jobs").select("id").limit(1).execute()
+        supabase.table("batch_jobs").select("job_id").limit(1).execute()
         logger.info("Database connection established successfully")
 
     except Exception as e:

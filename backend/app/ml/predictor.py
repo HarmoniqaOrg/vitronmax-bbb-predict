@@ -37,10 +37,13 @@ class BBBPredictor:
                 self._create_dummy_model()
             else:
                 self.model = joblib.load(model_path)
-
-            self.is_loaded = True
-            logger.info("BBB prediction model loaded successfully")
-
+                logger.info(f"Successfully loaded model from {model_path}")
+                logger.info(f"Loaded model type: {type(self.model)}")
+                logger.info(
+                    "Model object loaded. Details logging skipped to avoid potential version conflict errors during __repr__."
+                )
+                self.is_loaded = True
+            logger.info("Model loading process finished.")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise

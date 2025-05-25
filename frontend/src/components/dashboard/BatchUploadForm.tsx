@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useToast } from '@/hooks/use-toast';
@@ -8,24 +7,57 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, Info } from 'lucide-react';
+import { apiClient } from '@/lib/api';
+import type { BatchJob } from '@/lib/types';
+
+interface BatchFormInputs {
+  file: FileList;
+  jobName?: string;
+}
 
 const BatchUploadForm = () => {
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
   
-  const { register, handleSubmit } = useForm();
+  const { register, handleSubmit, reset } = useForm<BatchFormInputs>(); 
   
-  const onSubmit = async (data: any) => {
-    setIsUploading(true);
-    
-    // Mock upload
-    setTimeout(() => {
+  const onSubmit = async (data: BatchFormInputs) => {
+    if (!data.file || data.file.length === 0) {
       toast({
-        title: 'Batch job submitted',
-        description: 'Your batch prediction job has been queued',
+        title: 'No file selected',
+        description: 'Please select a CSV file to upload.',
+        variant: 'destructive',
       });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const fileToUpload = data.file[0];
+      const payload = {
+        file: fileToUpload,
+        jobName: data.jobName || undefined, 
+      };
+
+      console.log("Uploading batch file with payload:", payload);
+
+      const result: BatchJob = await apiClient.uploadBatchFile(payload);
+      
+      toast({
+        title: 'Batch job submitted successfully!',
+        description: `Job ID: ${result.job_id}. Status: ${result.status}.`,
+      });
+      reset(); // Reset form on success
+    } catch (error) {
+      console.error("Batch upload failed:", error);
+      toast({
+        title: 'Batch upload failed',
+        description: (error as Error)?.message || 'An unknown error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsUploading(false);
-    }, 2000);
+    }
   };
   
   return (

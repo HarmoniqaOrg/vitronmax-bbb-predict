@@ -228,11 +228,41 @@ async def batch_predict_csv(
         content = await file.read()
         df = pd.read_csv(io.StringIO(content.decode()))
 
-        # Validate required columns
-        if "smiles" not in df.columns:
+        # Normalize column names to lowercase for robust 'smiles' column detection
+        original_columns = list(df.columns)
+        df.columns = [col.lower() for col in df.columns]
+
+        smiles_column_original_name = None
+        if "smiles" in df.columns:
+            # Find the original casing of the 'smiles' column
+            for original_col in original_columns:
+                if original_col.lower() == "smiles":
+                    smiles_column_original_name = original_col
+                    break
+
+        if smiles_column_original_name is None:
+            # If still not found after lowercasing, then it's truly missing
             raise HTTPException(
-                status_code=400, detail="CSV must contain a 'smiles' column"
+                status_code=400,
+                detail="CSV must contain a 'smiles' column (case-insensitive).",
             )
+
+        # Ensure the column is named 'smiles' (lowercase) in the DataFrame for subsequent operations.
+        if (
+            smiles_column_original_name.lower() != "smiles"
+        ):  # This check is somewhat redundant given the loop above, but safe
+            # If the original (now lowercased) smiles column isn't 'smiles', rename it.
+            # This handles if the found column was e.g. 'smiles_string' and we want to use it as 'smiles'
+            # However, the current logic finds 'SMILES', lowercases it to 'smiles', so this rename might not be strictly needed
+            # unless the original column was something like ' MySmiles ' which became ' mysmiles '
+            # The critical part is that df.columns now has 'smiles'.
+            pass  # df.columns are already lowercased. The key is 'smiles' is now in df.columns.
+
+        # If the original column (after lowercasing) was not 'smiles' (e.g. it was 'smi_les' and we decided that's our smiles column)
+        # we would rename it here. But since we are looking for 'smiles' (case insensitive) and df.columns are now all lower,
+        # if 'smiles' is in df.columns, we can proceed.
+        # The important step was df.columns = [col.lower() for col in df.columns]
+        # and then checking for 'smiles'.
 
         # Validate batch size
         if len(df) > settings.MAX_BATCH_SIZE:
@@ -243,9 +273,11 @@ async def batch_predict_csv(
 
         # Clean and prepare data
         df = df.dropna(subset=["smiles"])
+        # Ensure 'molecule_name' column exists, using its lowercased version if present, or creating it.
+        # df.get("molecule_name") will work because df.columns are already lowercased.
         df["molecule_name"] = df.get("molecule_name", pd.Series(dtype="object")).fillna(
             ""
-        )  # Ensure column exists even if not in CSV
+        )
 
         smiles_data: List[Dict[str, Any]] = df[["smiles", "molecule_name"]].to_dict(
             orient="records"
