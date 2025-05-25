@@ -230,7 +230,7 @@ async def batch_predict_csv(
 
         # Normalize column names to lowercase for robust 'smiles' column detection
         original_columns = list(df.columns)
-        df.columns = [col.lower() for col in df.columns]
+        df.columns = pd.Index([col.lower() for col in df.columns])
 
         smiles_column_original_name = None
         if "smiles" in df.columns:
@@ -252,8 +252,7 @@ async def batch_predict_csv(
             smiles_column_original_name.lower() != "smiles"
         ):  # This check is somewhat redundant given the loop above, but safe
             # If the original (now lowercased) smiles column isn't 'smiles', rename it.
-            # This handles if the found column was e.g. 'smiles_string' and we want to use it as 'smiles'
-            # However, the current logic finds 'SMILES', lowercases it to 'smiles', so this rename might not be strictly needed
+            # This handles if the found column was e.g. 'SMILES', lowercased it to 'smiles', so this rename might not be strictly needed
             # unless the original column was something like ' MySmiles ' which became ' mysmiles '
             # The critical part is that df.columns now has 'smiles'.
             pass  # df.columns are already lowercased. The key is 'smiles' is now in df.columns.
