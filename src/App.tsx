@@ -10,6 +10,7 @@ import Footer from "./components/Footer";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Explain from "./pages/Explain";
+import BatchResults from "./pages/BatchResults";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
                 <Route path="/" element={<Index />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/explain" element={<Explain />} />
+                <Route path="/batch/:jobId/results" element={<BatchResults />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
