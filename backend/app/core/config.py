@@ -5,7 +5,8 @@ Application configuration settings.
 
 import os
 from typing import Optional
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 class Settings(BaseSettings):
     # API Configuration
@@ -18,12 +19,20 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENV: str = "development"
     
+    # CORS settings
+    ALLOWED_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"])
+    
     # Batch processing limits
     MAX_BATCH_SIZE: int = 10000  # Increased from 1000 to 10000
     MAX_FILE_SIZE_MB: int = 50   # 50MB file size limit
     
     # Model settings
     MODEL_VERSION: str = "v1.0"
+    MODEL_PATH: str = "app/models/bbb_rf_v1_0.joblib"
+    
+    # Fingerprint settings
+    FP_RADIUS: int = 2
+    FP_NBITS: int = 2048
     
     class Config:
         env_file = ".env"

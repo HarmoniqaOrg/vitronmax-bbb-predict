@@ -6,7 +6,7 @@ Pydantic models for request/response schemas.
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 
@@ -23,8 +23,9 @@ class PredictionRequest(BaseModel):
     smiles: str = Field(..., description="SMILES string of the molecule")
     molecule_name: Optional[str] = Field(None, description="Optional molecule name")
     
-    @validator("smiles")
-    def validate_smiles(cls, v):
+    @field_validator("smiles")
+    @classmethod
+    def validate_smiles(cls, v: str) -> str:
         """Basic SMILES validation."""
         if not v or len(v.strip()) == 0:
             raise ValueError("SMILES string cannot be empty")
@@ -82,8 +83,9 @@ class ExplainRequest(BaseModel):
     prediction_result: Optional[Dict[str, Any]] = None
     context: Optional[str] = Field(None, description="Additional context for explanation")
     
-    @validator("smiles")
-    def validate_smiles(cls, v):
+    @field_validator("smiles")
+    @classmethod
+    def validate_smiles(cls, v: str) -> str:
         """Basic SMILES validation."""
         if not v or len(v.strip()) == 0:
             raise ValueError("SMILES string cannot be empty")
