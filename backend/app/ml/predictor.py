@@ -62,6 +62,7 @@ class BBBPredictor:
             n_estimators=100, random_state=42, n_jobs=-1
         )
         self.model.fit(X_dummy, y_dummy)
+        self.is_loaded = True
 
     def smiles_to_fingerprint(self, smiles: str) -> NDArray[np.int_]:
         """Convert SMILES to Morgan fingerprint."""
