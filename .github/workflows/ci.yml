@@ -29,10 +29,6 @@ jobs:
         run: |
           cd backend
           ruff check app/ tests/
-      - name: Lint with flake8
-        run: |
-          cd backend
-          flake8 app/ tests/ --select E9,F63,F7,F82
       - name: Type check with mypy
         run: |
           cd backend
