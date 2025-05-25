@@ -1,9 +1,8 @@
-
 app = "vitronmax"
 primary_region = "dfw"
 
 [build]
-  dockerfile = "backend/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   LOG_LEVEL = "INFO"
