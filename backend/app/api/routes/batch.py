@@ -187,17 +187,24 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
 
         jobs = []
         for job_data in response.data:
+            # Define the format string for strptime
+            iso_format_with_offset = "%Y-%m-%dT%H:%M:%S.%f%z"
+
             # Preprocess created_at timestamp string
             created_at_str = job_data["created_at"]
             if len(created_at_str) > 6 and created_at_str[-3] == ":":
                 created_at_str = created_at_str[:-3] + created_at_str[-2:]
-            parsed_created_at = datetime.fromisoformat(created_at_str)
+            parsed_created_at = datetime.strptime(
+                created_at_str, iso_format_with_offset
+            )
 
             # Preprocess updated_at timestamp string
             updated_at_str = job_data["updated_at"]
             if len(updated_at_str) > 6 and updated_at_str[-3] == ":":
                 updated_at_str = updated_at_str[:-3] + updated_at_str[-2:]
-            parsed_updated_at = datetime.fromisoformat(updated_at_str)
+            parsed_updated_at = datetime.strptime(
+                updated_at_str, iso_format_with_offset
+            )
 
             # Preprocess estimated_completion_time timestamp string
             parsed_estimated_completion_time = None
@@ -211,9 +218,11 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
                         estimated_completion_time_str[:-3]
                         + estimated_completion_time_str[-2:]
                     )
-                parsed_estimated_completion_time = datetime.fromisoformat(
-                    estimated_completion_time_str
-                )
+                # Ensure the string is not empty before parsing
+                if estimated_completion_time_str:
+                    parsed_estimated_completion_time = datetime.strptime(
+                        estimated_completion_time_str, iso_format_with_offset
+                    )
 
             jobs.append(
                 BatchStatusResponse(
