@@ -187,22 +187,46 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
 
         jobs = []
         for job_data in response.data:
+            # Preprocess created_at timestamp string
+            created_at_str = job_data["created_at"]
+            if len(created_at_str) > 6 and created_at_str[-3] == ":":
+                created_at_str = created_at_str[:-3] + created_at_str[-2:]
+            parsed_created_at = datetime.fromisoformat(created_at_str)
+
+            # Preprocess updated_at timestamp string
+            updated_at_str = job_data["updated_at"]
+            if len(updated_at_str) > 6 and updated_at_str[-3] == ":":
+                updated_at_str = updated_at_str[:-3] + updated_at_str[-2:]
+            parsed_updated_at = datetime.fromisoformat(updated_at_str)
+
+            # Preprocess estimated_completion_time timestamp string
+            parsed_estimated_completion_time = None
+            estimated_completion_time_str = job_data.get("estimated_completion_time")
+            if estimated_completion_time_str:
+                if (
+                    len(estimated_completion_time_str) > 6
+                    and estimated_completion_time_str[-3] == ":"
+                ):
+                    estimated_completion_time_str = (
+                        estimated_completion_time_str[:-3]
+                        + estimated_completion_time_str[-2:]
+                    )
+                parsed_estimated_completion_time = datetime.fromisoformat(
+                    estimated_completion_time_str
+                )
+
             jobs.append(
                 BatchStatusResponse(
                     job_id=job_data["job_id"],
                     job_name=job_data.get("job_name"),
                     status=JobStatus(job_data["status"]),
-                    created_at=datetime.fromisoformat(job_data["created_at"]),
-                    updated_at=datetime.fromisoformat(job_data["updated_at"]),
+                    created_at=parsed_created_at,
+                    updated_at=parsed_updated_at,
                     total_molecules=job_data["total_molecules"],
                     processed_molecules=job_data.get("processed_molecules", 0),
                     failed_molecules=job_data.get("failed_molecules", 0),
                     progress_percentage=job_data.get("progress_percentage", 0.0),
-                    estimated_completion_time=(
-                        datetime.fromisoformat(job_data["estimated_completion_time"])
-                        if job_data.get("estimated_completion_time")
-                        else None
-                    ),
+                    estimated_completion_time=parsed_estimated_completion_time,
                     results_file_path=job_data.get("results_file_path"),
                     error_message=job_data.get("error_message"),
                 )

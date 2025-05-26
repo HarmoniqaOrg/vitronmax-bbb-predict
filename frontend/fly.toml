@@ -8,6 +8,8 @@ primary_region = 'fra'
 
 [build]
   dockerfile = "Dockerfile"
+  [build.args]
+    VITE_API_URL = "https://vitronmax.fly.dev/api/v1"
 
 [http_service]
   internal_port = 80

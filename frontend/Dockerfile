@@ -21,6 +21,10 @@ RUN npm ci
 # Copy the rest of the application source code
 COPY . .
 
+# Make VITE_API_URL build argument available as an environment variable
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application (this creates the /app/dist folder)
 RUN npm run build
 
@@ -32,6 +36,9 @@ RUN rm -rf /usr/share/nginx/html/*
 
 # Copy the built assets from the 'builder' stage's /app/dist directory
 COPY --from=builder /app/dist /usr/share/nginx/html/
+
+# Copy custom Nginx configuration
+COPY nginx.default.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 80 (nginx default)
 EXPOSE 80
