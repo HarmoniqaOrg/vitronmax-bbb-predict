@@ -1,4 +1,3 @@
-
 import { Beaker, Github } from 'lucide-react';
 
 const Footer = () => {
@@ -38,7 +37,7 @@ const Footer = () => {
             <ul className="space-y-2">
               <li>
                 <a 
-                  href="https://github.com/vitronmax/vitronmax"
+                  href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-sm hover:underline"
@@ -48,7 +47,12 @@ const Footer = () => {
                 </a>
               </li>
               <li>
-                <a href="/docs/api" className="text-sm hover:underline">
+                <a 
+                  href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/API-documentation.md" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-sm hover:underline"
+                >
                   API Documentation
                 </a>
               </li>
@@ -58,7 +62,7 @@ const Footer = () => {
         
         <div className="border-t mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
           <p className="text-sm text-muted-foreground">
-            © {year} VitronMax. All rights reserved.
+            {year} VitronMax. All rights reserved.
           </p>
           <div className="flex gap-4 mt-4 md:mt-0">
             <a href="/privacy" className="text-sm text-muted-foreground hover:underline">

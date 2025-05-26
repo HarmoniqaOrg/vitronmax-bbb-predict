@@ -1,6 +1,9 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { useMutation } from '@tanstack/react-query';
+import axios from 'axios'; // Keep for existing mutation if it doesn't use apiClient
+import apiClient from '@/lib/api'; // Import apiClient
+import { PdbOutput } from '@/lib/types'; // Import PdbOutput
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,13 +12,14 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Fingerprint, FileText, MessageSquare } from 'lucide-react';
 import PredictionResult from './PredictionResult';
+import MoleculeViewer from './MoleculeViewer';
 
 interface SinglePredictionFormData {
   smiles: string;
   molecule_name?: string;
 }
 
-interface MoleculeResult {
+interface SinglePredictionApiResponse {
   smiles: string;
   molecule_name?: string;
   bbb_probability: number;
@@ -24,53 +28,105 @@ interface MoleculeResult {
   processing_time_ms: number;
 }
 
+interface SinglePredictionResult extends SinglePredictionApiResponse {}
+
 const SinglePredictionForm = () => {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<MoleculeResult | null>(null);
+  const [result, setResult] = useState<SinglePredictionResult | null>(null);
+  const [pdbData, setPdbData] = useState<string | null>(null); // State for PDB data
+  const [isConvertingToPdb, setIsConvertingToPdb] = useState<boolean>(false);
   
   const { register, handleSubmit, watch, formState: { errors } } = useForm<SinglePredictionFormData>({
     defaultValues: {
-      smiles: '',
-      molecule_name: '',
+      smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', // Default to working Aspirin SMILES
+      molecule_name: 'Aspirin', // Default name for Aspirin
     }
   });
   
+  const [debouncedSmiles, setDebouncedSmiles] = useState<string>(''); // State for debounced SMILES
+
   const smiles = watch('smiles');
-  
-  const onSubmit = async (data: SinglePredictionFormData) => {
-    setIsLoading(true);
-    
-    try {
-      // Mock prediction for demo purposes
-      const mockResult: MoleculeResult = {
-        smiles: data.smiles,
-        molecule_name: data.molecule_name,
-        bbb_probability: 0.75 + Math.random() * 0.2,
-        prediction_class: 'permeable',
-        confidence_score: 0.85 + Math.random() * 0.1,
-        processing_time_ms: 250 + Math.random() * 200
+
+  // Debounce SMILES input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSmiles(smiles);
+    }, 500); // 500ms delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [smiles]);
+
+  // Effect to convert debounced SMILES to PDB
+  useEffect(() => {
+    if (debouncedSmiles) {
+      const fetchPdb = async () => {
+        setIsConvertingToPdb(true);
+        setPdbData(null); // Clear previous PDB data
+        try {
+          console.log(`[SinglePredictionForm] Converting SMILES to PDB: ${debouncedSmiles}`);
+          const response = await apiClient.convertSmilesToPdb(debouncedSmiles);
+          setPdbData(response.pdb_string);
+          console.log('[SinglePredictionForm] PDB data received:', response.pdb_string.substring(0,100) + '...'); // Log first 100 chars
+        } catch (error) {
+          console.error('[SinglePredictionForm] Error converting SMILES to PDB:', error);
+          setPdbData(null); // Ensure PDB data is null on error
+          // Optionally, show a toast message for PDB conversion failure
+          toast({
+            title: 'Molecule Display Error',
+            description: 'Could not generate 3D structure for the entered SMILES.',
+            variant: 'destructive',
+          });
+        }
+        setIsConvertingToPdb(false);
       };
-      
-      setTimeout(() => {
-        setResult(mockResult);
-        setIsLoading(false);
-        
-        toast({
-          title: 'Prediction complete',
-          description: `BBB probability: ${(mockResult.bbb_probability * 100).toFixed(1)}%`,
-        });
-      }, 1500);
-      
-    } catch (error) {
+      fetchPdb();
+    } else {
+      setPdbData(null); // Clear PDB if SMILES is empty
+    }
+  }, [debouncedSmiles, toast]);
+
+  const predictMolecule = async (data: SinglePredictionFormData): Promise<SinglePredictionApiResponse> => {
+    const apiUrl = `${import.meta.env.VITE_API_URL}/predict_fp`;
+    const response = await axios.post<SinglePredictionApiResponse>(apiUrl, data);
+    return response.data;
+  };
+
+  const mutation = useMutation<SinglePredictionApiResponse, Error, SinglePredictionFormData>({
+    mutationFn: predictMolecule,
+    onSuccess: (data) => {
+      setResult(data);
+      toast({
+        title: 'Prediction complete',
+        description: `BBB probability: ${(data.bbb_probability * 100).toFixed(1)}%`,
+      });
+    },
+    onError: (error) => {
       console.error('Prediction error:', error);
       toast({
         title: 'Prediction failed',
-        description: 'Unable to process the molecule. Please check the SMILES string.',
+        description: (axios.isAxiosError(error) && error.response?.data?.detail)
+          ? error.response.data.detail
+          : 'Unable to process the molecule. Please check the SMILES string or API server.',
         variant: 'destructive',
       });
-      setIsLoading(false);
-    }
+    },
+  });
+
+  // Log mutation status and result changes
+  useEffect(() => {
+    console.log('[SinglePredictionForm] Mutation or Result changed:', { 
+      isPending: mutation.isPending,
+      isSuccess: mutation.isSuccess,
+      isError: mutation.isError,
+      currentResult: result 
+    });
+  }, [mutation.isPending, mutation.isSuccess, mutation.isError, result]);
+
+  const onSubmit = (data: SinglePredictionFormData) => {
+    console.log('[SinglePredictionForm] onSubmit called with data:', data);
+    mutation.mutate(data);
   };
   
   const handleGenerateReport = () => {
@@ -89,7 +145,7 @@ const SinglePredictionForm = () => {
               <Label htmlFor="smiles">SMILES String</Label>
               <Input
                 id="smiles"
-                placeholder="Enter SMILES (e.g., CCO for ethanol)"
+                placeholder="Enter SMILES string" // Updated placeholder as it's now pre-filled
                 {...register('smiles', { required: true })}
               />
               {errors.smiles && (
@@ -106,12 +162,20 @@ const SinglePredictionForm = () => {
               />
             </div>
             
-            <div className="h-40 border rounded-md overflow-hidden flex items-center justify-center bg-muted">
-              <p className="text-muted-foreground">Molecule visualization for: {smiles || 'Enter SMILES'}</p>
+            <div 
+              className="border rounded-md overflow-hidden flex items-center justify-center bg-muted h-64 w-full relative"
+            >
+              {isConvertingToPdb && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-10 z-10">
+                  <p className="text-sm text-muted-foreground">Loading 3D structure...</p> 
+                  {/* You can add a spinner icon here */}
+                </div>
+              )}
+              <MoleculeViewer pdbData={pdbData} />
             </div>
             
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Predicting...' : 'Predict BBB Permeability'}
+            <Button type="submit" className="w-full" disabled={mutation.isPending || isConvertingToPdb}>
+              {mutation.isPending ? 'Predicting...' : 'Predict BBB Permeability'}
             </Button>
           </form>
         </CardContent>

@@ -1,4 +1,3 @@
-
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 
@@ -23,7 +22,12 @@ const CallToAction = () => {
               </a>
             </Button>
             <Button variant="outline" size="lg" className="w-full">
-              <a href="/docs/api" target="_blank" className="flex items-center justify-center w-full">
+              <a 
+                href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/API-documentation.md" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="flex items-center justify-center w-full"
+              >
                 API Documentation
               </a>
             </Button>

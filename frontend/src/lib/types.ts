@@ -84,3 +84,8 @@ export interface UserPreferences {
   showConfidenceColors: boolean;
   defaultView: 'single' | 'batch';
 }
+
+export interface PdbOutput {
+  pdb_string: string;
+  smiles_input: string; // The original SMILES that was converted
+}

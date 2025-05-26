@@ -67,6 +67,11 @@ class BBBPredictor:
     def smiles_to_fingerprint(self, smiles: str) -> NDArray[np.int_]:
         """Convert SMILES to Morgan fingerprint."""
         try:
+            # Detailed logging of the input SMILES string
+            logger.info(f"Attempting to parse SMILES: '{smiles}' (raw)")
+            logger.info(f"Attempting to parse SMILES: {repr(smiles)} (repr)")
+            logger.info(f"Type of SMILES input: {type(smiles)}")
+
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:
                 raise ValueError(f"Invalid SMILES: {smiles}")

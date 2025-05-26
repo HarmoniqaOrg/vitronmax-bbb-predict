@@ -17,7 +17,9 @@ class Settings(BaseSettings):
 
     # CORS settings
     # Store the raw string from the .env file, to be parsed by the property below.
-    ALLOWED_ORIGINS_STR: str = "http://localhost:3000,https://vitronmax.fly.dev"
+    ALLOWED_ORIGINS_STR: str = (
+        "http://localhost:3000,https://vitronmax.fly.dev,http://localhost:8081"
+    )
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:

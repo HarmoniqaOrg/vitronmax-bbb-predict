@@ -1,4 +1,3 @@
-
 /**
  * API client for VitronMax backend
  */
@@ -10,12 +9,13 @@ import type {
   BatchUploadFormData,
   SinglePredictionFormData,
   ModelInfo,
-  ExplainRequest
+  ExplainRequest,
+  PdbOutput // Added PdbOutput type
 } from './types';
 
 // Create axios instance with base config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -26,7 +26,11 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Log the error or send it to a logging service
+    // You can customize this based on your error handling strategy
     console.error('API Error:', error.response?.data || error.message);
+    // Optionally, re-throw a more user-friendly error or a custom error object
+    // For now, just re-throwing the original error
     return Promise.reject(error);
   }
 );
@@ -81,12 +85,15 @@ export const apiClient = {
 
   // Download batch results
   getBatchDownloadUrl: (jobId: string): string => {
-    return `${api.defaults.baseURL}/download/${jobId}`;
+    // Ensure baseURL doesn't end with a slash if paths don't start with one
+    const cleanedBaseURL = api.defaults.baseURL?.replace(/\/$/, '');
+    return `${cleanedBaseURL}/download/${jobId}`;
   },
 
   // Generate PDF report
   getReportUrl: (moleculeId: string): string => {
-    return `${api.defaults.baseURL}/report/${moleculeId}`;
+    const cleanedBaseURL = api.defaults.baseURL?.replace(/\/$/, '');
+    return `${cleanedBaseURL}/report/${moleculeId}`;
   },
 
   generateReportFromSmiles: async (data: SinglePredictionFormData): Promise<Blob> => {
@@ -105,7 +112,8 @@ export const apiClient = {
   // Get explanation for a prediction
   explainPrediction: async (data: ExplainRequest): Promise<Response> => {
     // Using fetch for EventSource compatibility
-    return fetch(`${api.defaults.baseURL}/explain`, {
+    const cleanedBaseURL = api.defaults.baseURL?.replace(/\/$/, '');
+    return fetch(`${cleanedBaseURL}/explain`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -117,6 +125,12 @@ export const apiClient = {
   // Get sample explanation (for demo purposes)
   getSampleExplanation: async () => {
     const response = await api.get('/explain/sample');
+    return response.data;
+  },
+
+  // Convert SMILES to PDB
+  convertSmilesToPdb: async (smiles: string): Promise<PdbOutput> => {
+    const response = await api.post<PdbOutput>('/utils/smiles-to-pdb', { smiles });
     return response.data;
   },
 };
