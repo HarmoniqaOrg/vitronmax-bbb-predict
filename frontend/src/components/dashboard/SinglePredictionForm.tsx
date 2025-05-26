@@ -28,7 +28,7 @@ interface SinglePredictionApiResponse {
   processing_time_ms: number;
 }
 
-interface SinglePredictionResult extends SinglePredictionApiResponse {}
+type SinglePredictionResult = SinglePredictionApiResponse;
 
 const SinglePredictionForm = () => {
   const { toast } = useToast();

@@ -1,9 +1,30 @@
 import React, { useEffect, useRef, memo } from 'react';
 // import $3Dmol from '3dmol'; // Commenting out direct import
 
+// Define interfaces for the 3Dmol library and its viewer
+interface ThreeDMolViewer {
+  addModel: (data: string, format: string) => void;
+  setStyle: (style: Record<string, unknown>, spec?: Record<string, unknown>) => void;
+  zoomTo: () => void;
+  render: () => void;
+  setBackgroundColor: (color: number, alpha?: number) => void;
+  removeAllModels: () => void;
+  clear: () => void;
+  resize: () => void;
+  // Add other methods you use from the viewer instance here
+}
+
+interface ThreeDMol {
+  createViewer: (element: HTMLElement | string, config?: Record<string, unknown>) => ThreeDMolViewer;
+  elementColors: {
+    rasmol: Record<string, unknown>;
+  };
+  // Add other properties/methods of $3Dmol global object if used
+}
+
 declare global {
   interface Window {
-    $3Dmol?: any;
+    $3Dmol?: ThreeDMol;
   }
 }
 
@@ -19,7 +40,7 @@ const MoleculeViewer: React.FC<MoleculeViewerProps> = ({
   height = 300, // Default height
 }) => {
   const viewerRef = useRef<HTMLDivElement>(null);
-  const glViewer = useRef<any>(null); // To store the 3Dmol viewer instance
+  const glViewer = useRef<ThreeDMolViewer | null>(null); // To store the 3Dmol viewer instance
 
   useEffect(() => {
     if (!viewerRef.current) {

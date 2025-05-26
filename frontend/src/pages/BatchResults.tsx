@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,7 +29,35 @@ const BatchResults = () => {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadJobStatus = async () => {
+  const parseCSVResults = useCallback((csvText: string): MoleculeResult[] => {
+    const lines = csvText.trim().split('\n');
+    if (lines.length <= 1) return [];
+    
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    const resultsArr: MoleculeResult[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+      const row: Partial<Record<string, string>> = {};
+      
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      
+      resultsArr.push({
+        smiles: row.smiles || '',
+        molecule_name: row.molecule_name || '',
+        bbb_probability: parseFloat(row.bbb_probability) || 0,
+        prediction_class: row.prediction_class || '',
+        confidence_score: parseFloat(row.confidence_score) || 0,
+        fingerprint_hash: row.fingerprint_hash,
+        error: row.error
+      });
+    }
+    return resultsArr;
+  }, []);
+
+  const loadJobStatus = useCallback(async () => {
     if (!jobId) return;
     
     try {
@@ -40,9 +67,9 @@ const BatchResults = () => {
       console.error('Error loading job status:', err);
       setError('Failed to load job details');
     }
-  };
+  }, [jobId]);
 
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     if (!jobId) return;
     
     try {
@@ -57,8 +84,8 @@ const BatchResults = () => {
       }
       
       const csvText = await response.text();
-      const parsedResults = parseCSVResults(csvText);
-      setResults(parsedResults);
+      const parsedData = parseCSVResults(csvText);
+      setResults(parsedData);
     } catch (err) {
       console.error('Error loading results:', err);
       toast({
@@ -69,36 +96,7 @@ const BatchResults = () => {
     } finally {
       setResultsLoading(false);
     }
-  };
-
-  const parseCSVResults = (csvText: string): MoleculeResult[] => {
-    const lines = csvText.trim().split('\n');
-    if (lines.length <= 1) return [];
-    
-    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-    const results: MoleculeResult[] = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-      const row: any = {};
-      
-      headers.forEach((header, index) => {
-        row[header] = values[index] || '';
-      });
-      
-      results.push({
-        smiles: row.smiles || '',
-        molecule_name: row.molecule_name || '',
-        bbb_probability: parseFloat(row.bbb_probability) || 0,
-        prediction_class: row.prediction_class || '',
-        confidence_score: parseFloat(row.confidence_score) || 0,
-        fingerprint_hash: row.fingerprint_hash,
-        error: row.error
-      });
-    }
-    
-    return results;
-  };
+  }, [jobId, parseCSVResults, toast]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -108,13 +106,13 @@ const BatchResults = () => {
     };
     
     loadData();
-  }, [jobId]);
+  }, [jobId, loadJobStatus]);
 
   useEffect(() => {
     if (job && job.status === 'completed') {
       loadResults();
     }
-  }, [job]);
+  }, [job, loadResults]);
 
   const handleDownloadOriginal = () => {
     if (!jobId) return;

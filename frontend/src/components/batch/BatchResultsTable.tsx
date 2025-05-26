@@ -1,4 +1,3 @@
-
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,7 +44,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const filteredAndSortedResults = useMemo(() => {
-    let filtered = results.filter(result => {
+    const filtered = results.filter(result => {
       const matchesSearch = !searchTerm || 
         result.smiles.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (result.molecule_name && result.molecule_name.toLowerCase().includes(searchTerm.toLowerCase()));
