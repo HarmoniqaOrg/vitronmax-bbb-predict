@@ -12,7 +12,7 @@ router = APIRouter()
     summary="Convert SMILES to PDB",
     description="Converts a SMILES string to a 3D structure in PDB format.",
 )
-async def convert_smiles_to_pdb(payload: SmilesInput = Body(...)):
+async def convert_smiles_to_pdb(payload: SmilesInput = Body(...)) -> PdbOutput:
     """
     Receives a SMILES string and returns the molecule's structure in PDB format.
     - **smiles**: The SMILES string of the molecule.

@@ -42,8 +42,5 @@ def smiles_to_pdb_string(smiles: str) -> str | None:
         pdb_block = Chem.MolToPDBBlock(mol_with_hs)
         return pdb_block
     except Exception as e:
-        # Log the exception e.g., using a logger
-        print(
-            f"Error converting SMILES to PDB: {smiles}, Error: {e}"
-        )  # Replace with proper logging
+        print(f"Error converting SMILES to PDB: {smiles}, Error: {str(e)}")
         return None

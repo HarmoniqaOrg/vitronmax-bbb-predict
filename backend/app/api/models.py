@@ -3,27 +3,19 @@ from pydantic import BaseModel, Field
 
 
 class SmilesInput(BaseModel):
-    smiles: str = Field(
-        ...,
-        example="CC(=O)Oc1ccccc1C(=O)O",
-        description="SMILES string of the molecule",
-    )
+    smiles: str = Field(description="SMILES string of the molecule")
 
 
 class PdbOutput(BaseModel):
-    pdb_string: str = Field(..., description="Molecule structure in PDB format")
-    smiles_input: str = Field(..., description="Original SMILES string provided")
+    pdb_string: str = Field(description="Molecule structure in PDB format")
+    smiles_input: str = Field(description="Original SMILES string provided")
 
 
 # --- Models for existing prediction endpoints (assuming structure) ---
 class PredictionRequest(BaseModel):
-    smiles: str = Field(
-        ...,
-        example="CC(=O)Oc1ccccc1C(=O)O",
-        description="SMILES string of the molecule",
-    )
+    smiles: str = Field(description="SMILES string of the molecule")
     molecule_name: Optional[str] = Field(
-        None, example="Aspirin", description="Optional name for the molecule"
+        default=None, description="Optional name for the molecule"
     )
 
 
