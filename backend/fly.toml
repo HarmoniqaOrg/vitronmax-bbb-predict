@@ -1,5 +1,5 @@
 app = "vitronmax"
-primary_region = "dfw"
+primary_region = "fra"
 
 [build]
   dockerfile = "Dockerfile"

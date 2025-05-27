@@ -171,7 +171,7 @@ async def process_batch_job(
             )
 
 
-@router.get("/batch_jobs", response_model=List[BatchStatusResponse])
+@router.get("/", response_model=List[BatchStatusResponse])
 async def get_all_batch_jobs() -> List[BatchStatusResponse]:
     """Get all batch jobs, ordered by creation date (newest first)."""
     db = get_db()
@@ -413,7 +413,9 @@ async def get_batch_status(
 async def download_batch_results(
     job_id: str, db: Any = Depends(get_db)
 ) -> StreamingResponse:
-    """Download results CSV for a completed batch job."""
+    logger.info(
+        f"[BATCH_DOWNLOAD] Attempting to download results for job_id: {job_id} at /api/v1/batch_jobs/download_batch_results/{job_id}"
+    )
     try:
         response = (
             db.table("batch_jobs")

@@ -13,9 +13,32 @@ import type {
   PdbOutput // Added PdbOutput type
 } from './types';
 
+// Helper function to determine the API base URL
+const getApiBaseUrl = (): string => {
+  const apiUrlFromEnv = import.meta.env.VITE_API_URL;
+
+  // Check if we are in a production environment (Vite sets import.meta.env.PROD)
+  if (import.meta.env.PROD) {
+    if (!apiUrlFromEnv) {
+      console.error(
+        "CRITICAL: VITE_API_URL is not set in the production environment! " +
+        "Please ensure this environment variable is correctly configured."
+      );
+      // Fallback to a non-functional or clearly problematic URL to make the error obvious
+      // Or, if you have a fixed production URL you can use as a last resort (though env var is better)
+      return "https://error.vite_api_url_not_set.com"; // Or your actual prod URL as a last resort
+    }
+    return apiUrlFromEnv; // Use the environment variable in production
+  }
+
+  // For development (import.meta.env.DEV is true or PROD is false)
+  // Use the environment variable if set, otherwise fallback to localhost
+  return apiUrlFromEnv || 'http://localhost:8001/api/v1';
+};
+
 // Create axios instance with base config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1',
+  baseURL: getApiBaseUrl(), // Use the helper function
   headers: {
     'Content-Type': 'application/json',
   },
@@ -73,7 +96,7 @@ export const apiClient = {
 
   // Get batch job status
   getBatchStatus: async (jobId: string): Promise<BatchJob> => {
-    const response = await api.get(`/batch_status/${jobId}`);
+    const response = await api.get(`/batch_jobs/batch_status/${jobId}`);
     return response.data;
   },
 
@@ -87,7 +110,7 @@ export const apiClient = {
   getBatchDownloadUrl: (jobId: string): string => {
     // Ensure baseURL doesn't end with a slash if paths don't start with one
     const cleanedBaseURL = api.defaults.baseURL?.replace(/\/$/, '');
-    return `${cleanedBaseURL}/download/${jobId}`;
+    return `${cleanedBaseURL}/batch_jobs/download_batch_results/${jobId}`;
   },
 
   // Generate PDF report

@@ -90,7 +90,7 @@ async def health_check() -> Dict[str, Any]:
 
 # Include API routes
 app.include_router(prediction.router, prefix="/api/v1", tags=["prediction"])
-app.include_router(batch.router, prefix="/api/v1", tags=["batch"])
+app.include_router(batch.router, prefix="/api/v1/batch_jobs", tags=["batch"])
 app.include_router(report.router, prefix="/api/v1", tags=["report"])
 app.include_router(explain.router, prefix="/api/v1", tags=["explain"])
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utilities"])
