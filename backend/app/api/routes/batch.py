@@ -8,11 +8,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, cast
 import unicodedata
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import io
-from supabase.lib import FileOptions  # Changed import
-
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from app.models.schemas import (
     BatchPredictionRequest,
     BatchJobResponse,
@@ -130,9 +130,9 @@ async def process_batch_job(
             # "Header value must be str or bytes, not <class 'bool'>" occurs.
             # Testing with upsert: "true" (str) to see if it resolves the issue.
             # The storage library should handle str("true").lower() correctly.
-            file_options: FileOptions = {
-                "cache_control": "3600",  # Corrected to snake_case
-                "upsert": "true",  # type: ignore[typeddict-item]
+            file_options: Dict[str, str] = {
+                "cache_control": "3600",
+                "upsert": "true",
             }
 
             db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
