@@ -6,7 +6,7 @@ import logging
 import uuid
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 import io
@@ -360,7 +360,10 @@ async def batch_predict_csv(
                 f"Job {job_id}: 'molecule_name' and 'compound_name' not found. Using empty strings for molecule names."
             )
 
-        smiles_data = df[["smiles", "molecule_name"]].to_dict(orient="records")
+        smiles_data: List[Dict[str, Any]] = cast(
+            List[Dict[str, Any]],
+            df[["smiles", "molecule_name"]].to_dict(orient="records"),
+        )
         total_molecules = len(smiles_data)
         logger.info(
             f"Job {job_id}: Extracted {total_molecules} records for processing."
