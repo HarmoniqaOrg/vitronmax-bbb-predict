@@ -11,6 +11,7 @@ import unicodedata
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 import io
+from supabase.lib.client_options import FileOptions  # Added import
 
 from app.models.schemas import (
     BatchPredictionRequest,
@@ -125,10 +126,19 @@ async def process_batch_job(
         storage_upload_successful = False  # Flag to track success
         storage_error_details = ""
         try:
+            # The FileOptions TypedDict expects upsert: bool. However, a runtime error
+            # "Header value must be str or bytes, not <class 'bool'>" occurs.
+            # Testing with upsert: "true" (str) to see if it resolves the issue.
+            # The storage library should handle str("true").lower() correctly.
+            file_options: FileOptions = {
+                "cache_control": "3600",  # Corrected to snake_case
+                "upsert": "true",  # type: ignore[typeddict-item]
+            }
+
             db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
                 path=results_file_storage_path,
                 file=csv_content.encode(),
-                file_options={"cacheControl": "3600", "upsert": True},
+                file_options=file_options,
             )
             logger.info(
                 f"Results for job {job_id} uploaded to storage: {results_file_storage_path}"
