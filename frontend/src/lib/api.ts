@@ -158,4 +158,31 @@ export const apiClient = {
   },
 };
 
+// Function to get a presigned URL for downloading batch results
+export const getBatchResultsPresignedUrl = async (jobId: string): Promise<string> => {
+  const response = await api.get(`/batch_jobs/download_batch_results_presigned_url/${jobId}`);
+  return response.data.download_url;
+};
+
+// New function to fetch platform statistics
+export interface PlatformStatistics {
+  total_predictions: number;
+  total_batch_jobs: number;
+  avg_batch_processing_time_seconds: number;
+  overall_batch_success_rate_percentage: number;
+}
+
+export const getPlatformStatistics = async (): Promise<PlatformStatistics> => {
+  const response = await api.get<PlatformStatistics>('/platform-statistics');
+  return response.data;
+};
+
+// Function to convert SMILES to PDB
+export const convertSmilesToPdb = async (
+  smiles: string,
+): Promise<PdbOutput> => {
+  const response = await api.post<PdbOutput>('/utils/smiles-to-pdb', { smiles });
+  return response.data;
+};
+
 export default apiClient;

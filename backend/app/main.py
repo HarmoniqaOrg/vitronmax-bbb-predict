@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.core.config import settings
-from app.api.routes import prediction, batch, report, explain, utils
+from app.api.routes import prediction, batch, report, explain, utils, statistics
 from app.core.database import init_db
 from app.core.logging_config import setup_logging
 
@@ -94,6 +94,7 @@ app.include_router(batch.router, prefix="/api/v1/batch_jobs", tags=["batch"])
 app.include_router(report.router, prefix="/api/v1", tags=["report"])
 app.include_router(explain.router, prefix="/api/v1", tags=["explain"])
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utilities"])
+app.include_router(statistics.router, prefix="/api/v1", tags=["statistics"])
 
 
 # Global exception handler
