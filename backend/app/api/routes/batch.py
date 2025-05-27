@@ -420,13 +420,13 @@ async def batch_predict_csv(
 
         db.table("batch_jobs").insert(job_data).execute()
 
-        # Start background processing
-        chunk_size = 100  # Process 100 molecules per task
-        for i in range(0, len(smiles_data), chunk_size):
-            chunk_smiles_data: List[Dict[str, Any]] = smiles_data[i : i + chunk_size]
-            background_tasks.add_task(
-                process_batch_job, job_id, chunk_smiles_data, predictor
-            )
+        # Pass the full list of SMILES data to a single background task
+        logger.info(
+            f"Job {job_id}: About to add task. Length of smiles_data being passed: {len(smiles_data)}"
+        )
+        background_tasks.add_task(
+            process_batch_job, job_id, smiles_data, predictor  # Pass full smiles_data
+        )
 
         created_at = datetime.utcnow()
         logger.info(f"Created batch job {job_id} with {total_molecules} molecules")
