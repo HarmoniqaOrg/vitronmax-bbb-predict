@@ -464,25 +464,35 @@ async def get_batch_status(
         if not job_data:
             raise HTTPException(status_code=404, detail="Batch job not found")
 
-        return BatchStatusResponse(
-            job_id=job_data["job_id"],
-            job_name=job_data.get("job_name"),
-            status=JobStatus(job_data["status"]),
-            created_at=datetime.fromisoformat(job_data["created_at"]),
-            updated_at=datetime.fromisoformat(job_data["updated_at"]),
-            total_molecules=job_data["total_molecules"],
-            processed_molecules=job_data.get("processed_molecules", 0),
-            failed_molecules=job_data.get("failed_molecules", 0),
-            progress_percentage=job_data.get("progress_percentage", 0.0),
-            results_file_path=job_data.get("results_file_path"),
-            estimated_completion_time=(
-                datetime.fromisoformat(job_data["estimated_completion_time"])
-                if job_data.get("estimated_completion_time")
-                else None
-            ),
-            error_message=job_data.get("error_message"),
-        )
-    except HTTPException:  # Re-raise HTTP exceptions
+        # Apply datetime parsing fix for fields from Supabase
+        datetime_fields_to_parse = [
+            "created_at",
+            "updated_at",
+            "estimated_completion_time",
+            "completed_at",
+        ]
+        for field_name in datetime_fields_to_parse:
+            dt_str = job_data.get(field_name)
+            if isinstance(dt_str, str):
+                # Remove colon from timezone offset if present (e.g., +00:00 -> +0000)
+                # Check if the string is long enough and has a colon at the third to last position
+                if len(dt_str) > 5 and dt_str[-3] == ":":
+                    dt_str = dt_str[:-3] + dt_str[-2:]
+                try:
+                    # Parse the datetime string using strptime
+                    job_data[field_name] = datetime.strptime(
+                        dt_str, "%Y-%m-%dT%H:%M:%S.%f%z"
+                    )
+                except ValueError as e_parse:
+                    logger.error(
+                        f"Error parsing datetime string '{dt_str}' for field '{field_name}' in job {job_id}: {e_parse}. Allowing Pydantic to attempt parsing."
+                    )
+                    # If strptime fails, we let Pydantic try. If Pydantic also fails, it will raise its own validation error.
+                    pass  # Let Pydantic handle it if our specific parsing fails
+
+        return BatchStatusResponse(**job_data)
+
+    except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching status for job {job_id}: {e}", exc_info=True)
