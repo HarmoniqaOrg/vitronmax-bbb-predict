@@ -11,8 +11,6 @@ import unicodedata
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import io
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, Field
 from app.models.schemas import (
     BatchPredictionRequest,
     BatchJobResponse,
