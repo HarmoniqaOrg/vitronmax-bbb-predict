@@ -125,7 +125,9 @@ async def process_batch_job(
         storage_error_details = ""
         try:
             db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
-                results_file_storage_path, csv_content.encode()
+                path=results_file_storage_path,
+                file=csv_content.encode(),
+                file_options={"cacheControl": "3600", "upsert": True},
             )
             logger.info(
                 f"Results for job {job_id} uploaded to storage: {results_file_storage_path}"
@@ -284,9 +286,28 @@ async def batch_predict_csv(
     db: Any = Depends(get_db),
 ) -> BatchJobResponse:
     """Accepts CSV file for batch BBB permeability prediction."""
+    job_id = str(uuid.uuid4())
+    job_name = (
+        request.job_name or f"Batch Job {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+    )
+    logger.info(
+        f"Received batch predict request for job_name: '{job_name}', assigned job_id: {job_id}"
+    )
+
     try:
-        content = await file.read()
-        df = pd.read_csv(io.StringIO(content.decode()))
+        contents = await file.read()
+        logger.info(f"Job {job_id}: Read {len(contents)} bytes from uploaded file.")
+        df = pd.read_csv(io.BytesIO(contents))
+        logger.info(
+            f"Job {job_id}: CSV parsed. Shape: {df.shape}. Columns: {df.columns.tolist()}"
+        )
+
+        if "smiles" not in df.columns:
+            logger.error(f"Job {job_id}: CSV must contain a 'smiles' column.")
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must contain a 'smiles' column (case-insensitive).",
+            )
 
         # Normalize column names to lowercase for robust 'smiles' column detection
         original_columns = list(df.columns)
@@ -345,19 +366,18 @@ async def batch_predict_csv(
         if not smiles_data:
             raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
 
-        # Create batch job
-        job_id = str(uuid.uuid4())
+        logger.info(
+            f"Job {job_id}: Extracted {len(smiles_data)} records for processing."
+        )
+
+        # Estimate completion time (very rough estimate)
         estimated_completion = datetime.utcnow() + timedelta(
             seconds=len(smiles_data) * settings.ESTIMATED_TIME_PER_MOLECULE
         )
 
         job_data = {
             "job_id": job_id,
-            "job_name": (
-                request.job_name
-                if request.job_name
-                else f"Batch Job {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
-            ),
+            "job_name": job_name,
             "status": JobStatus.PENDING.value,
             "total_molecules": len(smiles_data),
             "created_at": datetime.utcnow().isoformat(),
