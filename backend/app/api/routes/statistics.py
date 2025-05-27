@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends
-from typing import Any, List
+from typing import Any
 from datetime import datetime
 
 from app.core.database import get_db
