@@ -85,7 +85,7 @@ export const apiClient = {
       form.append('notify_email', formData.notifyEmail);
     }
     
-    const response = await api.post('/batch_predict_csv', form, {
+    const response = await api.post('/batch_jobs/batch_predict_csv', form, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
