@@ -7,6 +7,7 @@ import uuid
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, cast
+import unicodedata
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 import io
@@ -294,57 +295,75 @@ async def batch_predict_csv(
         f"Received batch predict request for job_name: '{job_name}', assigned job_id: {job_id}"
     )
 
+    contents = await file.read()
+    logger.info(f"Job {job_id}: Read {len(contents)} bytes from uploaded file.")
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
     try:
-        contents = await file.read()
-        logger.info(f"Job {job_id}: Read {len(contents)} bytes from uploaded file.")
-        df = pd.read_csv(io.BytesIO(contents))
+        try:
+            # Try with utf-8-sig first to handle potential BOM
+            contents_decoded = contents.decode("utf-8-sig")
+            df = pd.read_csv(io.StringIO(contents_decoded))
+            logger.info(
+                f"Job {job_id}: Successfully decoded CSV as utf-8-sig and parsed."
+            )
+        except UnicodeDecodeError:
+            logger.warning(
+                f"Job {job_id}: Failed to decode CSV as utf-8-sig. Trying default pandas decoding from bytes."
+            )
+            df = pd.read_csv(io.BytesIO(contents))
+            logger.info(
+                f"Job {job_id}: Parsed CSV with pandas default byte stream decoding."
+            )
+        except Exception as e:
+            logger.error(f"Job {job_id}: Failed to parse CSV. Error: {e}")
+            raise HTTPException(
+                status_code=400, detail=f"Failed to parse CSV file. Error: {e}"
+            )
+
+        if df.empty:
+            logger.error(
+                f"Job {job_id}: CSV file is empty or resulted in an empty DataFrame."
+            )
+            raise HTTPException(
+                status_code=400, detail="CSV file is empty or unreadable."
+            )
+
+        original_columns = list(df.columns)
         logger.info(
-            f"Job {job_id}: CSV parsed. Shape: {df.shape}. Columns: {df.columns.tolist()}"
+            f"Job {job_id}: CSV parsed. Shape: {df.shape}. Columns (original): {original_columns}"
+        )
+
+        # Robust column name normalization
+        normalized_columns = []
+        for col in original_columns:
+            try:
+                normalized_col = unicodedata.normalize("NFKC", str(col)).strip().lower()
+                normalized_columns.append(normalized_col)
+            except Exception as e:
+                logger.warning(
+                    f"Job {job_id}: Could not normalize column name '{col}'. Error: {e}. Using basic lowercasing."
+                )
+                normalized_columns.append(str(col).strip().lower())
+
+        df.columns = normalized_columns
+        logger.info(
+            f"Job {job_id}: Columns after full normalization: {df.columns.tolist()}"
         )
 
         if "smiles" not in df.columns:
-            logger.error(
-                f"Job {job_id}: CSV must contain a 'smiles' column. Found: {df.columns.tolist()}"
+            error_detail_msg = (
+                f"CSV must contain a 'smiles' column (case-insensitive). "
+                f"After normalization, found columns: {df.columns.tolist()}. "
+                f"Original columns were: {original_columns}."
             )
+            logger.error(f"Job {job_id}: {error_detail_msg}")
             raise HTTPException(
                 status_code=400,
-                detail=f"CSV must contain a 'smiles' column (case-insensitive). Found columns: {df.columns.tolist()}",
+                detail=error_detail_msg,
             )
-
-        # Normalize column names to lowercase for robust 'smiles' column detection
-        original_columns = list(df.columns)
-        df.columns = pd.Index([col.lower() for col in df.columns])
-
-        smiles_column_original_name = None
-        if "smiles" in df.columns:
-            # Find the original casing of the 'smiles' column
-            for original_col in original_columns:
-                if original_col.lower() == "smiles":
-                    smiles_column_original_name = original_col
-                    break
-
-        if smiles_column_original_name is None:
-            # If still not found after lowercasing, then it's truly missing
-            raise HTTPException(
-                status_code=400,
-                detail="CSV must contain a 'smiles' column (case-insensitive).",
-            )
-
-        # Ensure the column is named 'smiles' (lowercase) in the DataFrame for subsequent operations.
-        if (
-            smiles_column_original_name.lower() != "smiles"
-        ):  # This check is somewhat redundant given the loop above, but safe
-            # If the original (now lowercased) smiles column isn't 'smiles', rename it.
-            # This handles if the found column was e.g. 'SMILES', lowercased it to 'smiles', so this rename might not be strictly needed
-            # unless the original column was something like ' MySmiles ' which became ' mysmiles '
-            # The critical part is that df.columns now has 'smiles'.
-            pass  # df.columns are already lowercased. The key is 'smiles' is now in df.columns.
-
-        # If the original column (after lowercasing) was not 'smiles' (e.g. it was 'smi_les' and we decided that's our smiles column)
-        # we would rename it here. But since we are looking for 'smiles' (case insensitive) and df.columns are now all lower,
-        # if 'smiles' is in df.columns, we can proceed.
-        # The important step was df.columns = [col.lower() for col in df.columns]
-        # and then checking for 'smiles'.
 
         # Handle molecule_name: use 'compound_name' as fallback, then empty string
         if "molecule_name" in df.columns:
