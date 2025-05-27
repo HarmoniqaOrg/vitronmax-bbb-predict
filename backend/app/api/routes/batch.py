@@ -348,7 +348,7 @@ async def batch_predict_csv(
                 )
                 normalized_columns.append(str(col).strip().lower())
 
-        df.columns = normalized_columns
+        df.columns = pd.Index(normalized_columns) # Converted to pd.Index
         logger.info(
             f"Job {job_id}: Columns after full normalization: {df.columns.tolist()}"
         )
