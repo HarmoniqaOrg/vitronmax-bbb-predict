@@ -39,7 +39,7 @@ const CallToAction = () => {
               Our team is ready to help you integrate VitronMax into your drug discovery pipeline.
             </p>
             <Button variant="link">
-              <a href="mailto:contact@vitronmax.com">Contact Us</a>
+              <a href="mailto:hello@startupfoundry.dev">Contact Us</a>
             </Button>
           </div>
         </div>
