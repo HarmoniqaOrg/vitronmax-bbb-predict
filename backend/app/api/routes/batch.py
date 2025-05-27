@@ -303,10 +303,12 @@ async def batch_predict_csv(
         )
 
         if "smiles" not in df.columns:
-            logger.error(f"Job {job_id}: CSV must contain a 'smiles' column.")
+            logger.error(
+                f"Job {job_id}: CSV must contain a 'smiles' column. Found: {df.columns.tolist()}"
+            )
             raise HTTPException(
                 status_code=400,
-                detail="CSV must contain a 'smiles' column (case-insensitive).",
+                detail=f"CSV must contain a 'smiles' column (case-insensitive). Found columns: {df.columns.tolist()}",
             )
 
         # Normalize column names to lowercase for robust 'smiles' column detection
@@ -344,42 +346,43 @@ async def batch_predict_csv(
         # The important step was df.columns = [col.lower() for col in df.columns]
         # and then checking for 'smiles'.
 
-        # Validate batch size
-        if len(df) > settings.MAX_BATCH_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Batch size exceeds maximum of {settings.MAX_BATCH_SIZE}",
+        # Handle molecule_name: use 'compound_name' as fallback, then empty string
+        if "molecule_name" in df.columns:
+            df["molecule_name"] = df["molecule_name"].astype(str).fillna("")
+        elif "compound_name" in df.columns:
+            df["molecule_name"] = df["compound_name"].astype(str).fillna("")
+            logger.info(
+                f"Job {job_id}: Using 'compound_name' column as 'molecule_name'."
+            )
+        else:
+            df["molecule_name"] = ""  # Assign a default Series of empty strings
+            logger.info(
+                f"Job {job_id}: 'molecule_name' and 'compound_name' not found. Using empty strings for molecule names."
             )
 
-        # Clean and prepare data
-        df = df.dropna(subset=["smiles"])
-        # Ensure 'molecule_name' column exists, using its lowercased version if present, or creating it.
-        # df.get("molecule_name") will work because df.columns are already lowercased.
-        df["molecule_name"] = df.get("molecule_name", pd.Series(dtype="object")).fillna(
-            ""
+        smiles_data = df[["smiles", "molecule_name"]].to_dict(orient="records")
+        total_molecules = len(smiles_data)
+        logger.info(
+            f"Job {job_id}: Extracted {total_molecules} records for processing."
         )
-
-        smiles_data: List[Dict[str, Any]] = df[["smiles", "molecule_name"]].to_dict(
-            orient="records"
-        )  # type: ignore[assignment]
 
         if not smiles_data:
             raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
 
         logger.info(
-            f"Job {job_id}: Extracted {len(smiles_data)} records for processing."
+            f"Job {job_id}: Extracted {total_molecules} records for processing."
         )
 
         # Estimate completion time (very rough estimate)
         estimated_completion = datetime.utcnow() + timedelta(
-            seconds=len(smiles_data) * settings.ESTIMATED_TIME_PER_MOLECULE
+            seconds=total_molecules * settings.ESTIMATED_TIME_PER_MOLECULE
         )
 
         job_data = {
             "job_id": job_id,
             "job_name": job_name,
             "status": JobStatus.PENDING.value,
-            "total_molecules": len(smiles_data),
+            "total_molecules": total_molecules,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
             "estimated_completion_time": estimated_completion.isoformat(),
@@ -396,14 +399,14 @@ async def batch_predict_csv(
             )
 
         created_at = datetime.utcnow()
-        logger.info(f"Created batch job {job_id} with {len(smiles_data)} molecules")
+        logger.info(f"Created batch job {job_id} with {total_molecules} molecules")
 
         return BatchJobResponse(
             job_id=job_id,
             status=JobStatus.PENDING,
             created_at=created_at,
             estimated_completion_time=estimated_completion,
-            total_molecules=len(smiles_data),
+            total_molecules=total_molecules,
             detail="Batch job created and queued for processing.",
         )
     except HTTPException:  # Re-raise HTTP exceptions
