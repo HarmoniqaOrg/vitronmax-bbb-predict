@@ -167,9 +167,7 @@ async def process_batch_job(
             if final_error_message:
                 update_payload["error_message"] = final_error_message
 
-            db.table("batch_jobs").update(update_payload).eq(
-                "job_id", job_id
-            ).execute()
+            db.table("batch_jobs").update(update_payload).eq("job_id", job_id).execute()
 
             if storage_upload_successful:
                 logger.info(
