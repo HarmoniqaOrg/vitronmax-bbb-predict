@@ -11,7 +11,7 @@ import unicodedata
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 import io
-from supabase.lib.client_options import FileOptions  # Added import
+from supabase.lib import FileOptions  # Changed import
 
 from app.models.schemas import (
     BatchPredictionRequest,
