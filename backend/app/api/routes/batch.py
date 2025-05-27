@@ -121,6 +121,8 @@ async def process_batch_job(
 
         # Upload results to storage
         results_file_storage_path: Optional[str] = f"batch_results_{job_id}.csv"
+        storage_upload_successful = False  # Flag to track success
+        storage_error_details = ""
         try:
             db.storage.from_(settings.STORAGE_BUCKET_NAME).upload(
                 results_file_storage_path, csv_content.encode()
@@ -128,31 +130,58 @@ async def process_batch_job(
             logger.info(
                 f"Results for job {job_id} uploaded to storage: {results_file_storage_path}"
             )
+            storage_upload_successful = True  # Mark as successful
         except Exception as e_storage:
             logger.error(
                 f"Failed to upload results to storage for job {job_id}: {e_storage}"
             )
-            results_file_storage_path = None
+            storage_error_details = str(e_storage)
+            # results_file_storage_path remains the intended path, but we know it failed.
+            # The error_message will indicate this.
 
-        # Update job as completed
+        # Update job status based on storage upload success
+        final_status = (
+            JobStatus.COMPLETED.value
+            if storage_upload_successful
+            else JobStatus.FAILED.value
+        )
+        final_results_path = (
+            results_file_storage_path if storage_upload_successful else None
+        )
+        final_error_message = (
+            None
+            if storage_upload_successful
+            else f"Failed to upload results to storage: {storage_error_details}"
+        )
+
         try:
-            db.table("batch_jobs").update(
-                {
-                    "status": JobStatus.COMPLETED.value,
-                    "processed_molecules": processed_count,
-                    "failed_molecules": failed_count,
-                    "progress_percentage": 100.0,
-                    "results_file_path": results_file_storage_path,
-                    "completed_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat(),
-                }
-            ).eq("job_id", job_id).execute()
-            logger.info(
-                f"Batch job {job_id} completed successfully with {processed_count} processed and {failed_count} failed molecules."
-            )
+            update_payload: Dict[str, Any] = {
+                "status": final_status,
+                "processed_molecules": processed_count,
+                "failed_molecules": failed_count,
+                "progress_percentage": 100.0,
+                "results_file_path": final_results_path,
+                "completed_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+            if final_error_message:
+                update_payload["error_message"] = final_error_message
+
+            db.table("batch_jobs").update(update_payload).eq(
+                "job_id", job_id
+            ).execute()
+
+            if storage_upload_successful:
+                logger.info(
+                    f"Batch job {job_id} completed successfully with {processed_count} processed and {failed_count} failed molecules."
+                )
+            else:
+                logger.error(
+                    f"Batch job {job_id} marked as FAILED due to storage upload error. {processed_count} processed, {failed_count} failed."
+                )
         except Exception as e_complete:
             logger.error(
-                f"Failed to update job completion status for job {job_id}: {e_complete}"
+                f"Failed to update job final status for job {job_id}: {e_complete}"
             )
 
     except Exception as e_job:
