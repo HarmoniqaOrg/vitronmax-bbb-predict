@@ -61,34 +61,66 @@ const BatchResults = () => {
       const rowData: Partial<MoleculeResult> = {};
       
       headers.forEach((header, index) => {
-        const mappedKey = headerMap[header] as keyof MoleculeResult;
+        const mappedKey = headerMap[header.toLowerCase()]; // Ensure header is lowercased for map lookup
         if (mappedKey) {
-          const value = values[index] || '';
-          if ([
-            'bbb_probability', 'confidence_score', 'molecular_weight', 
-            'logp', 'tpsa', 'refractivity', 'exact_mw'
-          ].includes(mappedKey)) {
-            (rowData[mappedKey] as any) = parseFloat(value) || 0;
-          } else if ([
-            'h_bond_donors', 'h_bond_acceptors', 'rotatable_bonds', 
-            'pains_alerts', 'brenk_alerts', 'formal_charge', 'num_rings',
-            'num_radical_electrons', 'num_valence_electrons'
-          ].includes(mappedKey)) {
-            (rowData[mappedKey] as any) = parseInt(value, 10) || 0;
-          } else {
-            (rowData[mappedKey] as any) = value;
+          const valueStr = values[index] || '';
+          switch (mappedKey) {
+            // Float properties
+            case 'bbb_probability':
+            case 'confidence_score':
+            case 'molecular_weight':
+            case 'logp':
+            case 'tpsa':
+            case 'refractivity':
+            case 'exact_mw':
+              rowData[mappedKey] = parseFloat(valueStr) || 0;
+              break;
+            // Integer properties
+            case 'h_bond_donors':
+            case 'h_bond_acceptors':
+            case 'rotatable_bonds':
+            case 'pains_alerts':
+            case 'brenk_alerts':
+            case 'formal_charge':
+            case 'num_rings':
+            case 'num_radical_electrons':
+            case 'num_valence_electrons':
+            // processing_time_ms is also an int, but typically not in batch CSVs, handled by default later
+              rowData[mappedKey] = parseInt(valueStr, 10) || 0;
+              break;
+            // String properties
+            case 'smiles':
+            case 'molecule_name': // Will be string or undefined if column missing/empty
+            case 'prediction_class':
+            case 'error': // Will be string or undefined
+              rowData[mappedKey] = valueStr;
+              break;
+            // case 'processing_time_ms': // If it could come from CSV and needs int parsing
+            //   rowData[mappedKey] = parseInt(valueStr, 10) || 0;
+            //   break;
+            // case 'fingerprint_features': // Example for a more complex type if it were in CSV
+            //   rowData[mappedKey] = valueStr ? valueStr.split(';').map(Number) : undefined;
+            //   break;
+            default:
+              // This ensures that if MoleculeResult gains new types of properties,
+              // we are alerted here if they are added to headerMap but not handled.
+              // For now, all types in MoleculeResult that are in headerMap are covered.
+              // const _exhaustiveCheck: never = mappedKey;
+              // console.warn(`Unhandled key type in CSV parsing: ${String(mappedKey)}`);
+              break;
           }
         }
       });
       
+      // Ensure all required fields for MoleculeResult are present, even if with default/empty values
       resultsArr.push({
         smiles: rowData.smiles || '',
-        molecule_name: rowData.molecule_name || '',
-        bbb_probability: rowData.bbb_probability || 0,
+        molecule_name: rowData.molecule_name, // Retains undefined if not present or empty in CSV
+        bbb_probability: rowData.bbb_probability ?? 0,
         prediction_class: rowData.prediction_class || '',
-        confidence_score: rowData.confidence_score || 0,
-        processing_time_ms: 0, 
-        molecular_weight: rowData.molecular_weight || 0,
+        confidence_score: rowData.confidence_score ?? 0,
+        processing_time_ms: rowData.processing_time_ms ?? 0, // Defaults to 0 if not parsed from CSV
+        molecular_weight: rowData.molecular_weight ?? 0,
         logp: rowData.logp || 0,
         tpsa: rowData.tpsa || 0,
         h_bond_donors: rowData.h_bond_donors || 0,
