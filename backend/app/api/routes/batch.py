@@ -136,7 +136,10 @@ async def process_batch_job(
                         except Exception as e_retry_insert_error:
                             # Check if it's a PostgREST foreign key violation (code 23503)
                             is_fk_violation = False
-                            if hasattr(e_retry_insert_error, "code") and e_retry_insert_error.code == "23503":  # type: ignore
+                            if (
+                                hasattr(e_retry_insert_error, "code")
+                                and e_retry_insert_error.code == "23503"
+                            ):
                                 is_fk_violation = True
                             elif hasattr(e_retry_insert_error, "json") and callable(
                                 e_retry_insert_error.json
@@ -251,7 +254,10 @@ async def process_batch_job(
                             ) as e_retry_insert_item:  # Inner except for a single attempt
                                 is_fk_violation = False
                                 # Check for PostgREST/Supabase specific FK violation (code '23503')
-                                if hasattr(e_retry_insert_item, "code") and e_retry_insert_item.code == "23503":  # type: ignore
+                                if (
+                                    hasattr(e_retry_insert_item, "code")
+                                    and e_retry_insert_item.code == "23503"
+                                ):
                                     is_fk_violation = True
                                 elif hasattr(e_retry_insert_item, "json") and callable(
                                     e_retry_insert_item.json
@@ -370,7 +376,10 @@ async def process_batch_job(
                                 break  # Success from insert
                             except Exception as e_retry_missing_item:
                                 is_fk_violation_missing = False
-                                if hasattr(e_retry_missing_item, "code") and e_retry_missing_item.code == "23503":  # type: ignore
+                                if (
+                                    hasattr(e_retry_missing_item, "code")
+                                    and e_retry_missing_item.code == "23503"
+                                ):
                                     is_fk_violation_missing = True
                                 elif hasattr(e_retry_missing_item, "json") and callable(
                                     e_retry_missing_item.json
@@ -877,8 +886,46 @@ async def batch_predict_csv(
         )
 
         # Use the created_at from job_data for consistency in response
-        # Pydantic will parse the ISO string from job_data["created_at"] into a datetime object.
-        created_at_for_response = datetime.fromisoformat(job_data["created_at"])
+        created_at_str = str(job_data["created_at"])
+        # Remove colon from timezone offset if present, e.g., +00:00 -> +0000, for %z compatibility
+        if len(created_at_str) > 6 and created_at_str[-3] == ":":
+            created_at_str = created_at_str[:-3] + created_at_str[-2:]
+        # Ensure there are 6 digits for microseconds if a decimal point is present
+        if "." in created_at_str:
+            parts = created_at_str.split(".")
+            if len(parts) == 2:
+                main_part = parts[0]
+                frac_part_full = parts[1]
+                # Separate fractional seconds from timezone offset
+                frac_seconds = ""
+                tz_offset = ""
+                if "+" in frac_part_full:
+                    idx = frac_part_full.find("+")
+                    frac_seconds = frac_part_full[:idx]
+                    tz_offset = frac_part_full[idx:]
+                elif "-" in frac_part_full and not frac_part_full.startswith(
+                    "-"
+                ):  # Ensure it's a timezone minus, not negative time part
+                    idx = frac_part_full.find("-")
+                    frac_seconds = frac_part_full[:idx]
+                    tz_offset = frac_part_full[idx:]
+                else:  # Assuming 'Z' or no offset, or offset already handled
+                    frac_seconds = frac_part_full.rstrip("Z")
+                    if frac_part_full.endswith("Z"):
+                        tz_offset = "Z"
+
+                frac_seconds = frac_seconds[:6].ljust(
+                    6, "0"
+                )  # Pad/truncate to 6 digits
+                created_at_str = f"{main_part}.{frac_seconds}{tz_offset}"
+
+        # Handle 'Z' for UTC explicitly as strptime's %z might not always handle it well across Python versions/platforms
+        if created_at_str.endswith("Z"):
+            created_at_str = created_at_str[:-1] + "+0000"
+
+        created_at_for_response = datetime.strptime(
+            created_at_str, "%Y-%m-%dT%H:%M:%S.%f%z"
+        )
         logger.info(
             f"Created batch job {job_id} with {total_molecules} molecules, record successfully inserted."
         )
