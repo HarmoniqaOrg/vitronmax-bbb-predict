@@ -73,14 +73,12 @@ async def process_batch_job(
                 f"Job {job_id}: Attempting to insert record into batch_predictions: {batch_prediction_data}"
             )
             insert_bp_response = (
-                await db.table("batch_predictions")
-                .insert(batch_prediction_data)
-                .execute()
+                db.table("batch_predictions").insert(batch_prediction_data).execute()
             )
             if not (hasattr(insert_bp_response, "data") and insert_bp_response.data):
                 error_msg = f"Failed to insert record into batch_predictions. Response: {insert_bp_response}"
                 logger.error(f"Job {job_id}: {error_msg}")
-                await db.table("batch_jobs").update(
+                db.table("batch_jobs").update(
                     {
                         "status": JobStatus.FAILED.value,
                         "error_message": error_msg,
@@ -95,7 +93,7 @@ async def process_batch_job(
             error_msg = f"Exception inserting into batch_predictions: {str(e_bp)}"
             logger.error(f"Job {job_id}: {error_msg}", exc_info=True)
             try:
-                await db.table("batch_jobs").update(
+                db.table("batch_jobs").update(
                     {
                         "status": JobStatus.FAILED.value,
                         "error_message": error_msg,
