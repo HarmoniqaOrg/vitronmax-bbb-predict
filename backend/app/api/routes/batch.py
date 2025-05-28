@@ -37,10 +37,14 @@ def get_predictor() -> BBBPredictor:
 
 
 async def process_batch_job(
-    job_id: str, smiles_data: List[Dict[str, Any]], predictor: BBBPredictor
+    job_id: str,
+    job_name: str,
+    original_filename: str,
+    smiles_data: List[Dict[str, Any]],
+    predictor: BBBPredictor,
+    db: Any,
 ) -> None:
     """Background task to process batch prediction job."""
-    db = get_db()
     total_molecules = len(smiles_data)
     processed_count = 0  # Successfully predicted molecules
     failed_count = 0  # Molecules that failed prediction or had invalid input
@@ -48,9 +52,65 @@ async def process_batch_job(
     final_results_for_csv: List[Dict[str, Any]] = []
 
     try:
-        logger.info(f"Starting batch job {job_id} with {total_molecules} molecules")
+        logger.info(
+            f"Job {job_id}: Starting background processing for job_name: '{job_name}'"
+        )
 
-        # Update job status to processing
+        # Create a record in batch_predictions to link items
+        batch_prediction_data = {
+            "id": job_id,  # This is the job_id from batch_jobs
+            "filename": original_filename,
+            "status": JobStatus.PROCESSING.value,
+            "created_at": datetime.utcnow().isoformat(),
+            "total_molecules": total_molecules,
+            "processed_molecules": 0,
+            "completed_at": None,  # Will be set upon completion
+            "result_url": None,  # Will be set upon completion
+            "error_message": None,  # Will be set if the whole batch prediction fails
+        }
+        try:
+            logger.info(
+                f"Job {job_id}: Attempting to insert record into batch_predictions: {batch_prediction_data}"
+            )
+            insert_bp_response = (
+                await db.table("batch_predictions")
+                .insert(batch_prediction_data)
+                .execute()
+            )
+            if not (hasattr(insert_bp_response, "data") and insert_bp_response.data):
+                error_msg = f"Failed to insert record into batch_predictions. Response: {insert_bp_response}"
+                logger.error(f"Job {job_id}: {error_msg}")
+                await db.table("batch_jobs").update(
+                    {
+                        "status": JobStatus.FAILED.value,
+                        "error_message": error_msg,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                ).eq("job_id", job_id).execute()
+                return  # Stop processing
+            logger.info(
+                f"Job {job_id}: Successfully inserted record into batch_predictions: {insert_bp_response.data}"
+            )
+        except Exception as e_bp:
+            error_msg = f"Exception inserting into batch_predictions: {str(e_bp)}"
+            logger.error(f"Job {job_id}: {error_msg}", exc_info=True)
+            try:
+                await db.table("batch_jobs").update(
+                    {
+                        "status": JobStatus.FAILED.value,
+                        "error_message": error_msg,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                ).eq("job_id", job_id).execute()
+            except Exception as e_update_job:
+                logger.error(
+                    f"Job {job_id}: Additionally failed to update batch_jobs to FAILED: {e_update_job}",
+                    exc_info=True,
+                )
+            return  # Stop processing
+
+        # Initialize job status in the database (or ensure it's already PENDING)
+        # The main batch_jobs status is already PENDING, here we update for PROCESSING start for batch_predictions items
         db.table("batch_jobs").update(
             {
                 "status": JobStatus.PROCESSING.value,
@@ -882,8 +942,12 @@ async def batch_predict_csv(
         background_tasks.add_task(
             process_batch_job,
             job_id,
+            job_name,  # For logging or if batch_jobs table uses it
+            file.filename
+            or f"unknown_file_{job_id}.csv",  # Pass original_filename, ensure str
             smiles_data_list,
-            predictor,  # Pass full smiles_data
+            predictor,
+            db,  # Pass db client instance
         )
 
         # Use the created_at from job_data for consistency in response
