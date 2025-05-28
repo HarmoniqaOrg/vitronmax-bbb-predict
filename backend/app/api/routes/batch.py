@@ -607,15 +607,18 @@ async def batch_predict_csv(
 
             # If the SMILES field itself contains a pattern like SMILES_string,"description"...
             # we want to extract just the SMILES_string part.
-            # The pattern is: a comma, followed by a double quote, introducing the description.
-            if (
-                ', "' in raw_smiles_field
-            ):  # Check for comma followed by ONE double quote
-                # Split at the first occurrence of ',"'
+            # The pattern is: a comma, followed by a double quote. Space after comma is optional.
+
+            # Try splitting by ',"' (comma directly followed by quote)
+            if ',"' in raw_smiles_field:
                 parts = raw_smiles_field.split(',"', 1)
-                actual_smiles = parts[0]  # This will be the part before ',"'
+                actual_smiles = parts[0].strip()
+            # Else, try splitting by ', "' (comma, space, quote) - less likely but good to cover
+            elif ', "' in raw_smiles_field:
+                parts = raw_smiles_field.split(', "', 1)
+                actual_smiles = parts[0].strip()
             else:
-                actual_smiles = raw_smiles_field
+                actual_smiles = raw_smiles_field.strip()
 
             # Clean the extracted SMILES string
             # Remove any leading/trailing whitespace and then any surrounding quotes.
