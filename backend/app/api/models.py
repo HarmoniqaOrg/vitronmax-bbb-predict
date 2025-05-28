@@ -20,7 +20,7 @@ class SinglePredictionRequest(BaseModel):
 
 
 class SinglePredictionResponse(BaseModel):
-    input_smiles: str
+    smiles: str
     molecule_name: Optional[str] = None
     status: str = Field(
         description="Processing status for this molecule (e.g., success, error_invalid_smiles)"

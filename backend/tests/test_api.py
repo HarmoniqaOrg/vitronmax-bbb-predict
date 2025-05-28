@@ -35,7 +35,10 @@ class TestPredictionAPI:
         assert response.status_code == 200
         data = response.json()
 
-        assert "input_smiles" in data
+        assert "smiles" in data
+        assert data["smiles"] == "CCO"
+        assert "molecule_name" in data
+        assert data["molecule_name"] == "ethanol"
         assert "bbb_probability" in data
         assert "bbb_class" in data
         assert "bbb_confidence" in data
@@ -43,7 +46,7 @@ class TestPredictionAPI:
         assert "logp" in data
         assert "processing_time_ms" in data
 
-        assert data["input_smiles"] == "CCO"
+        # Removed redundant check for input_smiles, already checked as data["smiles"]
         assert data["molecule_name"] == "ethanol"
         assert data["status"] == "success"
         assert 0 <= data["bbb_probability"] <= 1

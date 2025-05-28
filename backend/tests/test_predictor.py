@@ -143,7 +143,7 @@ class TestBBBPredictor:
         data = await predictor_with_model.predict_smiles_data(smiles)
 
         assert data["status"] == "success"
-        assert data["input_smiles"] == smiles
+        assert data["smiles"] == smiles
         assert data["mw"] == approx(180.157, rel=1e-3)
         assert data["pains_alerts"] == 0
         assert data["brenk_alerts"] == 1  # Aspirin has one Brenk alert (ester)
@@ -194,24 +194,24 @@ class TestBBBPredictor:
 
         # Ethanol (CCO) - success
         assert results[0]["status"] == "success"
-        assert results[0]["input_smiles"] == "CCO"
+        assert results[0]["smiles"] == "CCO"
         assert results[0]["mw"] is not None
         assert results[0]["bbb_probability"] is not None
 
         # INVALID_SMILES - error
         assert results[1]["status"] != "success"
-        assert results[1]["input_smiles"] == "INVALID_SMILES"
+        assert results[1]["smiles"] == "INVALID_SMILES"
         assert results[1]["error"] is not None
         assert results[1]["mw"] is None
 
         # Acetic Acid (CC(=O)O) - success
         assert results[2]["status"] == "success"
-        assert results[2]["input_smiles"] == "CC(=O)O"
+        assert results[2]["smiles"] == "CC(=O)O"
         assert results[2]["mw"] is not None
 
         # Empty SMILES - error
         assert results[3]["status"] == "error_empty_smiles"
-        assert results[3]["input_smiles"] == ""
+        assert results[3]["smiles"] == ""
         assert results[3]["error"] is not None
 
 
