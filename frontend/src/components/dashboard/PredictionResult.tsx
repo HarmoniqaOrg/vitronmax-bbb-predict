@@ -1,15 +1,6 @@
-
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-
-interface MoleculeResult {
-  smiles: string;
-  molecule_name?: string;
-  bbb_probability: number;
-  prediction_class: string;
-  confidence_score: number;
-  processing_time_ms: number;
-}
+import { MoleculeResult } from '@/lib/types';
 
 interface PredictionResultProps {
   result: MoleculeResult;
@@ -74,6 +65,70 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
         <div>
           <p className="text-muted-foreground">Processing Time</p>
           <p>{result.processing_time_ms.toFixed(2)} ms</p>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-md font-medium mt-6 mb-3">Molecular Properties</h4>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div>
+            <p className="text-muted-foreground">Molecular Weight</p>
+            <p>{result.molecular_weight?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">LogP</p>
+            <p>{result.logp?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">TPSA</p>
+            <p>{result.tpsa?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">H-Bond Donors</p>
+            <p>{result.h_bond_donors ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">H-Bond Acceptors</p>
+            <p>{result.h_bond_acceptors ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Rotatable Bonds</p>
+            <p>{result.rotatable_bonds ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Formal Charge</p>
+            <p>{result.formal_charge ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Refractivity</p>
+            <p>{result.refractivity?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Number of Rings</p>
+            <p>{result.num_rings ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Exact MW</p>
+            <p>{result.exact_mw?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-md font-medium mt-4 mb-3">Structural Alerts</h4>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div>
+            <p className="text-muted-foreground">PAINS Alerts</p>
+            <p className={result.pains_alerts > 0 ? 'text-orange-600 font-semibold' : ''}>
+              {result.pains_alerts ?? 'N/A'}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Brenk Alerts</p>
+            <p className={result.brenk_alerts > 0 ? 'text-orange-600 font-semibold' : ''}>
+              {result.brenk_alerts ?? 'N/A'}
+            </p>
+          </div>
         </div>
       </div>
     </div>

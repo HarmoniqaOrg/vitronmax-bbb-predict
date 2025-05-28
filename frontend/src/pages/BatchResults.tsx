@@ -6,17 +6,7 @@ import { ArrowLeft, Download, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import BatchResultsTable from '@/components/batch/BatchResultsTable';
 import apiClient from '@/lib/api';
-import type { BatchJob } from '@/lib/types';
-
-interface MoleculeResult {
-  smiles: string;
-  molecule_name?: string;
-  bbb_probability: number;
-  prediction_class: string;
-  confidence_score: number;
-  fingerprint_hash?: string;
-  error?: string;
-}
+import type { BatchJob, MoleculeResult } from '@/lib/types';
 
 const BatchResults = () => {
   const { jobId } = useParams<{ jobId: string }>();
@@ -33,29 +23,90 @@ const BatchResults = () => {
     const lines = csvText.trim().split('\n');
     if (lines.length <= 1) return [];
     
-    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
     const resultsArr: MoleculeResult[] = [];
     
+    const headerMap: { [key: string]: keyof MoleculeResult | string } = {
+      smiles: 'smiles',
+      molecule_name: 'molecule_name',
+      bbb_probability: 'bbb_probability',
+      prediction_class: 'prediction_class',
+      confidence_score: 'confidence_score',
+      molecular_weight: 'molecular_weight',
+      logp: 'logp',
+      tpsa: 'tpsa',
+      h_bond_donors: 'h_bond_donors',
+      h_bond_acceptors: 'h_bond_acceptors',
+      rotatable_bonds: 'rotatable_bonds',
+      pains_alerts: 'pains_alerts',
+      brenk_alerts: 'brenk_alerts',
+      formal_charge: 'formal_charge',
+      refractivity: 'refractivity',
+      num_rings: 'num_rings',
+      exact_mw: 'exact_mw',
+      num_radical_electrons: 'num_radical_electrons',
+      num_valence_electrons: 'num_valence_electrons',
+      error: 'error',
+    };
+
+    const smilesHeader = headers.find(h => h === 'smiles');
+    if (!smilesHeader) {
+        console.error("CSV Parse Error: 'smiles' header not found.");
+        toast({ title: 'CSV Parsing Error', description: "Mandatory 'smiles' column not found in results.", variant: 'destructive' });
+        return [];
+    }
+
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
-      const row: Partial<Record<string, string>> = {};
+      const rowData: Partial<MoleculeResult> = {};
       
       headers.forEach((header, index) => {
-        row[header] = values[index] || '';
+        const mappedKey = headerMap[header] as keyof MoleculeResult;
+        if (mappedKey) {
+          const value = values[index] || '';
+          if ([
+            'bbb_probability', 'confidence_score', 'molecular_weight', 
+            'logp', 'tpsa', 'refractivity', 'exact_mw'
+          ].includes(mappedKey)) {
+            (rowData[mappedKey] as any) = parseFloat(value) || 0;
+          } else if ([
+            'h_bond_donors', 'h_bond_acceptors', 'rotatable_bonds', 
+            'pains_alerts', 'brenk_alerts', 'formal_charge', 'num_rings',
+            'num_radical_electrons', 'num_valence_electrons'
+          ].includes(mappedKey)) {
+            (rowData[mappedKey] as any) = parseInt(value, 10) || 0;
+          } else {
+            (rowData[mappedKey] as any) = value;
+          }
+        }
       });
       
       resultsArr.push({
-        smiles: row.smiles || '',
-        molecule_name: row.molecule_name || '',
-        bbb_probability: parseFloat(row.bbb_probability) || 0,
-        prediction_class: row.prediction_class || '',
-        confidence_score: parseFloat(row.confidence_score) || 0,
-        fingerprint_hash: row.fingerprint_hash,
-        error: row.error
+        smiles: rowData.smiles || '',
+        molecule_name: rowData.molecule_name || '',
+        bbb_probability: rowData.bbb_probability || 0,
+        prediction_class: rowData.prediction_class || '',
+        confidence_score: rowData.confidence_score || 0,
+        processing_time_ms: 0, 
+        molecular_weight: rowData.molecular_weight || 0,
+        logp: rowData.logp || 0,
+        tpsa: rowData.tpsa || 0,
+        h_bond_donors: rowData.h_bond_donors || 0,
+        h_bond_acceptors: rowData.h_bond_acceptors || 0,
+        rotatable_bonds: rowData.rotatable_bonds || 0,
+        pains_alerts: rowData.pains_alerts || 0,
+        brenk_alerts: rowData.brenk_alerts || 0,
+        formal_charge: rowData.formal_charge || 0,
+        refractivity: rowData.refractivity || 0,
+        num_rings: rowData.num_rings || 0,
+        exact_mw: rowData.exact_mw || 0,
+        num_radical_electrons: rowData.num_radical_electrons || 0,
+        num_valence_electrons: rowData.num_valence_electrons || 0,
+        error: rowData.error,
       });
     }
     return resultsArr;
-  }, []);
+  }, [toast]);
 
   const loadJobStatus = useCallback(async () => {
     if (!jobId) return;
@@ -74,8 +125,6 @@ const BatchResults = () => {
     
     try {
       setResultsLoading(true);
-      // Since we don't have a direct API endpoint for parsed results,
-      // we'll need to download and parse the CSV file
       const downloadUrl = apiClient.getBatchDownloadUrl(jobId);
       const response = await fetch(downloadUrl);
       

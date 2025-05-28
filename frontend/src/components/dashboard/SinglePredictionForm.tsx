@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios'; // Keep for existing mutation if it doesn't use apiClient
 import apiClient from '@/lib/api'; // Import apiClient
-import { PdbOutput } from '@/lib/types'; // Import PdbOutput
+import { MoleculeResult, PdbOutput } from '@/lib/types'; // Import MoleculeResult and PdbOutput
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,16 +19,7 @@ interface SinglePredictionFormData {
   molecule_name?: string;
 }
 
-interface SinglePredictionApiResponse {
-  smiles: string;
-  molecule_name?: string;
-  bbb_probability: number;
-  prediction_class: string;
-  confidence_score: number;
-  processing_time_ms: number;
-}
-
-type SinglePredictionResult = SinglePredictionApiResponse;
+type SinglePredictionResult = MoleculeResult;
 
 const SinglePredictionForm = () => {
   const { toast } = useToast();
@@ -87,13 +78,14 @@ const SinglePredictionForm = () => {
     }
   }, [debouncedSmiles, toast]);
 
-  const predictMolecule = async (data: SinglePredictionFormData): Promise<SinglePredictionApiResponse> => {
+  const predictMolecule = async (data: SinglePredictionFormData): Promise<SinglePredictionResult> => {
     const apiUrl = `${import.meta.env.VITE_API_URL}/predict_fp`;
-    const response = await axios.post<SinglePredictionApiResponse>(apiUrl, data);
+    // Ensure the response is cast or expected as SinglePredictionResult (which is MoleculeResult)
+    const response = await axios.post<SinglePredictionResult>(apiUrl, data);
     return response.data;
   };
 
-  const mutation = useMutation<SinglePredictionApiResponse, Error, SinglePredictionFormData>({
+  const mutation = useMutation<SinglePredictionResult, Error, SinglePredictionFormData>({
     mutationFn: predictMolecule,
     onSuccess: (data) => {
       setResult(data);

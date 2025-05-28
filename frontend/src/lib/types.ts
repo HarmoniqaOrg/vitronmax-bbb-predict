@@ -10,6 +10,21 @@ export interface MoleculeResult {
   confidence_score: number;
   processing_time_ms: number;
   fingerprint_features?: number[];
+  molecular_weight: number;
+  logp: number;
+  tpsa: number;
+  h_bond_donors: number;
+  h_bond_acceptors: number;
+  rotatable_bonds: number;
+  pains_alerts: number;
+  brenk_alerts: number;
+  formal_charge: number;
+  refractivity: number;
+  num_rings: number;
+  exact_mw: number;
+  num_radical_electrons: number;
+  num_valence_electrons: number;
+  error?: string; // Added optional error field for individual molecule processing errors
 }
 
 export interface BatchJob {
