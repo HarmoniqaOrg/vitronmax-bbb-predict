@@ -35,12 +35,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.ml.predictor import BBBPredictor
 
     app.state.predictor = BBBPredictor()
-    await app.state.predictor.load_model()
+    # await app.state.predictor.load_model() # Model is loaded in BBBPredictor.__init__
 
-    logger.info("VitronMax API server started successfully")
-    yield
-
-    logger.info("Shutting down VitronMax API server...")
+    logger.info("VitronMax API server started successfully.")
+    try:
+        yield
+    finally:
+        logger.info("Shutting down VitronMax API server...")
 
 
 # Create FastAPI app

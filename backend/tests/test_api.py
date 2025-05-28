@@ -30,34 +30,40 @@ class TestPredictionAPI:
     def test_predict_fp_success(self, client: TestClient) -> None:
         """Test successful prediction with valid SMILES."""
         response = client.post(
-            "/api/v1/predict_fp", json={"smiles": "CCO", "molecule_name": "ethanol"}
+            "/api/v1/predict", json={"smiles": "CCO", "molecule_name": "ethanol"}
         )
         assert response.status_code == 200
         data = response.json()
 
-        assert "smiles" in data
+        assert "input_smiles" in data
         assert "bbb_probability" in data
-        assert "prediction_class" in data
-        assert "confidence_score" in data
+        assert "bbb_class" in data
+        assert "bbb_confidence" in data
+        assert "mw" in data
+        assert "logp" in data
         assert "processing_time_ms" in data
 
-        assert data["smiles"] == "CCO"
+        assert data["input_smiles"] == "CCO"
+        assert data["molecule_name"] == "ethanol"
+        assert data["status"] == "success"
         assert 0 <= data["bbb_probability"] <= 1
-        assert data["prediction_class"] in ["permeable", "non_permeable"]
-        assert 0 <= data["confidence_score"] <= 1
+        assert data["bbb_class"] in ["permeable", "non_permeable"]
+        assert 0 <= data["bbb_confidence"] <= 1
         assert data["processing_time_ms"] > 0
 
     def test_invalid_smiles(self, client: TestClient) -> None:
         """Test behavior with invalid SMILES."""
-        response = client.post(
-            "/api/v1/predict_fp", json={"smiles": "INVALID_SMILES_123"}
-        )
-        assert response.status_code == 422
+        response = client.post("/api/v1/predict", json={"smiles": "INVALID_SMILES_123"})
+        assert response.status_code == 400
+        json_response = response.json()
+        assert "detail" in json_response
 
     def test_empty_smiles(self, client: TestClient) -> None:
         """Test behavior with empty SMILES."""
-        response = client.post("/api/v1/predict_fp", json={"smiles": ""})
-        assert response.status_code == 422
+        response = client.post("/api/v1/predict", json={"smiles": ""})
+        assert response.status_code == 400
+        json_response = response.json()
+        assert "detail" in json_response
 
     def test_model_info(self, client: TestClient) -> None:
         """Test model info endpoint."""

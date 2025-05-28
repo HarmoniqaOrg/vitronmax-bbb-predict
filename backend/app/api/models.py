@@ -12,21 +12,69 @@ class PdbOutput(BaseModel):
 
 
 # --- Models for existing prediction endpoints (assuming structure) ---
-class PredictionRequest(BaseModel):
+class SinglePredictionRequest(BaseModel):
     smiles: str = Field(description="SMILES string of the molecule")
     molecule_name: Optional[str] = Field(
         default=None, description="Optional name for the molecule"
     )
 
 
-class PredictionResponse(BaseModel):
-    smiles: str
+class SinglePredictionResponse(BaseModel):
+    input_smiles: str
     molecule_name: Optional[str] = None
-    bbb_probability: float
-    prediction_class: str
-    confidence_score: float
-    # processing_time_ms: float # Assuming this might be added by the endpoint logic, not part of core response model
-    fingerprint: Optional[List[int]] = None  # Or appropriate type for fingerprint
+    status: str = Field(
+        description="Processing status for this molecule (e.g., success, error_invalid_smiles)"
+    )
+
+    # BBB Prediction specific
+    bbb_probability: Optional[float] = None
+    bbb_class: Optional[str] = None
+    bbb_confidence: Optional[float] = None
+
+    # Physicochemical properties
+    mw: Optional[float] = Field(default=None, description="Molecular Weight (g/mol)")
+    logp: Optional[float] = Field(
+        default=None, description="Octanol-water partition coefficient (Crippen LogP)"
+    )
+    tpsa: Optional[float] = Field(
+        default=None, description="Topological Polar Surface Area (Å²)"
+    )
+    rot_bonds: Optional[int] = Field(
+        default=None, description="Number of Rotatable Bonds"
+    )
+    h_acceptors: Optional[int] = Field(
+        default=None, description="Number of H-bond Acceptors"
+    )
+    h_donors: Optional[int] = Field(default=None, description="Number of H-bond Donors")
+    frac_csp3: Optional[float] = Field(
+        default=None, description="Fraction of sp3 hybridized carbons"
+    )
+    molar_refractivity: Optional[float] = Field(
+        default=None, description="Molar Refractivity (Crippen MR)"
+    )
+    log_s_esol: Optional[float] = Field(
+        default=None, description="Estimated aqueous solubility (ESOL model LogS)"
+    )
+
+    # Drug-likeness & ADME
+    gi_absorption: Optional[str] = Field(
+        default=None, description="Predicted Gastrointestinal Absorption (High/Low)"
+    )
+    lipinski_passes: Optional[bool] = Field(
+        default=None, description="Passes Lipinski's Rule of Five"
+    )
+
+    # Structural Alerts
+    pains_alerts: Optional[int] = Field(
+        default=None, description="Number of PAINS alerts"
+    )
+    brenk_alerts: Optional[int] = Field(
+        default=None, description="Number of Brenk alerts"
+    )
+
+    # Audit and timing
+    processing_time_ms: Optional[float] = None
+    model_version: Optional[str] = None
 
 
 class BatchPredictionItem(BaseModel):

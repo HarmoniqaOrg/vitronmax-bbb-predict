@@ -39,11 +39,14 @@ async def process_batch_job(
 ) -> None:
     """Background task to process batch prediction job."""
     db = get_db()
-    failed_count = 0
-    processed_count = 0
+    total_molecules = len(smiles_data)
+    processed_count = 0  # Successfully predicted molecules
+    failed_count = 0  # Molecules that failed prediction or had invalid input
+
+    final_results_for_csv: List[Dict[str, Any]] = []
 
     try:
-        logger.info(f"Starting batch job {job_id} with {len(smiles_data)} molecules")
+        logger.info(f"Starting batch job {job_id} with {total_molecules} molecules")
 
         # Update job status to processing
         db.table("batch_jobs").update(
@@ -53,73 +56,152 @@ async def process_batch_job(
             }
         ).eq("job_id", job_id).execute()
 
-        results = []
+        valid_input_items: List[Dict[str, Any]] = []
+        smiles_for_predictor_call: List[str] = []
 
-        for i, item in enumerate(smiles_data):
-            try:
-                smiles = item["smiles"]
-                molecule_name = item.get("molecule_name", "")
+        # Step 1: Pre-process input, separate valid SMILES for predictor, handle initially invalid ones
+        for item_data in smiles_data:
+            s = item_data.get("smiles")
+            molecule_name = item_data.get("molecule_name", "")
 
-                logger.info(f"Processing molecule {i + 1}/{len(smiles_data)}: {smiles}")
-
-                # Make prediction
-                probability, pred_class, confidence, fingerprint = (
-                    predictor.predict_single(smiles)
-                )
-                fp_hash = predictor.calculate_fingerprint_hash(fingerprint)
-
-                result = {
-                    "smiles": smiles,
+            if isinstance(s, str) and s.strip():
+                valid_input_items.append(item_data)
+                smiles_for_predictor_call.append(s)
+            else:
+                # Handle SMILES that are invalid before even calling the predictor
+                error_res = {
+                    "input_smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
                     "molecule_name": molecule_name,
-                    "bbb_probability": probability,
-                    "prediction_class": pred_class,
-                    "confidence_score": confidence,
-                    "fingerprint_hash": fp_hash,
+                    "status": "error_invalid_input_smiles",
+                    "bbb_probability": None,
+                    "bbb_class": None,
+                    "bbb_confidence": None,
+                    "mw": None,
+                    "logp": None,
+                    "tpsa": None,
+                    "rot_bonds": None,
+                    "h_acceptors": None,
+                    "h_donors": None,
+                    "frac_csp3": None,
+                    "molar_refractivity": None,
+                    "log_s_esol": None,
+                    "gi_absorption": None,
+                    "lipinski_passes": None,
+                    "pains_alerts": None,
+                    "brenk_alerts": None,
+                    "error": "Invalid or empty SMILES string provided in input.",
                 }
-                results.append(result)
-                processed_count += 1
-
-            except Exception as e:
-                logger.warning(
-                    f"Failed to process molecule {item.get('smiles', 'unknown')} in job {job_id}: {e}"
-                )
+                final_results_for_csv.append(error_res)
                 failed_count += 1
-                results.append(
-                    {
-                        "smiles": item.get("smiles", ""),
-                        "molecule_name": item.get("molecule_name", ""),
-                        "bbb_probability": 0.0,
-                        "prediction_class": "error",
-                        "confidence_score": 0.0,
-                        "error": str(e),
-                    }
+
+        logger.info(
+            f"Job {job_id}: Found {len(smiles_for_predictor_call)} valid SMILES to process, {failed_count} initially invalid items."
+        )
+
+        # Step 2: Call predictor.predict_batch with valid SMILES strings
+        if smiles_for_predictor_call:
+            logger.info(
+                f"Job {job_id}: Calling predictor.predict_batch for {len(smiles_for_predictor_call)} SMILES strings."
+            )
+            results_from_batch_predict: List[Dict[str, Any]] = predictor.predict_batch(
+                smiles_for_predictor_call
+            )
+            logger.info(
+                f"Job {job_id}: Received {len(results_from_batch_predict)} results from predictor.predict_batch."
+            )
+
+            # Step 3: Merge predictor results with original data (molecule_name) and count success/failure
+            if len(results_from_batch_predict) == len(valid_input_items):
+                for i, res_dict in enumerate(results_from_batch_predict):
+                    original_item = valid_input_items[i]
+                    # Add molecule_name from the original input item
+                    res_dict["molecule_name"] = original_item.get("molecule_name", "")
+                    # 'input_smiles' is already in res_dict from predict_smiles_data
+
+                    final_results_for_csv.append(res_dict)
+                    if res_dict.get("status") == "success":
+                        processed_count += 1
+                    else:
+                        failed_count += 1
+                        # Ensure 'error' field exists if not set by predictor for non-success status
+                        if "error" not in res_dict:
+                            res_dict["error"] = res_dict.get(
+                                "status", "prediction_error"
+                            )
+            else:
+                # This is an unexpected internal error if counts don't match
+                logger.error(
+                    f"Job {job_id}: Mismatch in result count from predictor. Expected {len(valid_input_items)}, Got {len(results_from_batch_predict)}. Marking remaining as failed."
                 )
+                # Account for the discrepancy in failed_count for accurate job summary
+                # This part might need more robust handling depending on how critical the mismatch is.
+                # For now, we assume the job will be marked as failed later if storage fails or if this error is severe.
+                # Add placeholder errors for items that didn't get a result
+                num_missing_results = len(valid_input_items) - len(
+                    results_from_batch_predict
+                )
+                failed_count += num_missing_results  # Add to overall failed count
+                for i in range(len(results_from_batch_predict), len(valid_input_items)):
+                    missing_item_data = valid_input_items[i]
+                    error_res = {
+                        "input_smiles": missing_item_data.get(
+                            "smiles", "UNKNOWN_SMILES_ERROR"
+                        ),
+                        "molecule_name": missing_item_data.get("molecule_name", ""),
+                        "status": "error_missing_predictor_result",
+                        "error": "Predictor did not return a result for this item.",
+                        # Populate other fields with None or default error values
+                        "bbb_probability": None,
+                        "bbb_class": None,
+                        "bbb_confidence": None,
+                        "mw": None,
+                        "logp": None,
+                        "tpsa": None,
+                        "rot_bonds": None,
+                        "h_acceptors": None,
+                        "h_donors": None,
+                        "frac_csp3": None,
+                        "molar_refractivity": None,
+                        "log_s_esol": None,
+                        "gi_absorption": None,
+                        "lipinski_passes": None,
+                        "pains_alerts": None,
+                        "brenk_alerts": None,
+                    }
+                    final_results_for_csv.append(error_res)
 
-            # Update progress every 10 molecules or on completion
-            if (i + 1) % 10 == 0 or (i + 1) == len(smiles_data):
-                progress = ((i + 1) / len(smiles_data)) * 100
-                try:
-                    db.table("batch_jobs").update(
-                        {
-                            "processed_molecules": processed_count,
-                            "failed_molecules": failed_count,
-                            "progress_percentage": progress,
-                            "updated_at": datetime.utcnow().isoformat(),
-                        }
-                    ).eq("job_id", job_id).execute()
-                    logger.info(
-                        f"Job {job_id}: {i + 1}/{len(smiles_data)} molecules processed ({progress:.1f}%)"
-                    )
-                except Exception as e_progress:
-                    logger.error(
-                        f"Failed to update progress for job {job_id}: {e_progress}"
-                    )
+        logger.info(
+            f"Job {job_id}: All items processed. Successfully predicted: {processed_count}. Total failed (input or prediction): {failed_count}."
+        )
 
-        # Store results and update job status
-        results_df = pd.DataFrame(results)
+        # Step 4: Update DB progress (once, after all processing)
+        try:
+            db.table("batch_jobs").update(
+                {
+                    "processed_molecules": processed_count,  # Number successfully predicted
+                    "failed_molecules": failed_count,  # Number failed or invalid input
+                    "progress_percentage": 100.0,
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("job_id", job_id).execute()
+            logger.info(f"Job {job_id}: Progress updated to 100%.")
+        except Exception as e_progress:
+            logger.error(
+                f"Failed to update job progress for job {job_id}: {e_progress}"
+            )
+
+        # Step 5: Store results to CSV and upload
+        results_df = pd.DataFrame(final_results_for_csv)
+        # Ensure 'input_smiles' is the first column if it exists, then 'molecule_name'
+        cols = list(results_df.columns)
+        preferred_order = ["input_smiles", "molecule_name"]
+        for col_name in reversed(preferred_order):
+            if col_name in cols:
+                cols.insert(0, cols.pop(cols.index(col_name)))
+        results_df = results_df.loc[:, cols]
+
         csv_content = results_df.to_csv(index=False)
 
-        # Upload results to storage
         results_file_storage_path: Optional[str] = f"batch_results_{job_id}.csv"
         storage_upload_successful = False  # Flag to track success
         storage_error_details = ""

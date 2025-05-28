@@ -6,47 +6,87 @@ import logging
 import joblib
 import numpy as np
 from numpy.typing import NDArray
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 from pathlib import Path
-import hashlib
 
-from rdkit import Chem
+from rdkit import Chem, rdBase
 from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import Descriptors, Crippen, FilterCatalog, Lipinski
 from sklearn.ensemble import RandomForestClassifier
 
 from app.core.config import settings
+
+# Ensure RDKit logging is handled appropriately if verbose output is not desired
+rdBase.DisableLog("rdApp.error")
 
 logger = logging.getLogger(__name__)
 
 
 class BBBPredictor:
-    """Blood-Brain-Barrier permeability predictor."""
+    """Blood-Brain Barrier Permeability Predictor."""
 
     def __init__(self) -> None:
         self.model: Optional[RandomForestClassifier] = None
-        self.is_loaded = False
+        self.is_loaded: bool = False
+        self.pains_catalog: Optional[FilterCatalog.FilterCatalog] = None
+        self.brenk_catalog: Optional[FilterCatalog.FilterCatalog] = None
 
-    async def load_model(self) -> None:
-        """Load the trained Random Forest model."""
         try:
-            model_path = Path(settings.MODEL_PATH)
-            if not model_path.exists():
-                # Create a dummy model for demo purposes
-                logger.warning("Model file not found, creating dummy model")
-                self._create_dummy_model()
-            else:
+            # Initialize PAINS alerts catalog (RDKit built-in A, B, C)
+            pains_filter_params = FilterCatalog.FilterCatalogParams()
+            for cat_enum_val in (
+                FilterCatalog.FilterCatalogParams.FilterCatalogs.PAINS_A,
+                FilterCatalog.FilterCatalogParams.FilterCatalogs.PAINS_B,
+                FilterCatalog.FilterCatalogParams.FilterCatalogs.PAINS_C,
+            ):
+                pains_filter_params.AddCatalog(cat_enum_val)
+            self.pains_catalog = FilterCatalog.FilterCatalog(pains_filter_params)
+            logger.info(
+                "PAINS alert catalog (RDKit built-in A, B, C) loaded successfully."
+            )
+
+            # Initialize Brenk alerts catalog (RDKit built-in)
+            brenk_filter_params = FilterCatalog.FilterCatalogParams()
+            brenk_filter_params.AddCatalog(
+                FilterCatalog.FilterCatalogParams.FilterCatalogs.BRENK
+            )
+            self.brenk_catalog = FilterCatalog.FilterCatalog(brenk_filter_params)
+            logger.info("Brenk alert catalog (RDKit built-in) loaded successfully.")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize RDKit filter catalogs: {e}")
+            # Set catalogs to None to indicate failure but allow app to potentially continue
+            self.pains_catalog = None
+            self.brenk_catalog = None
+
+        # Load the pre-trained model
+        try:
+            self._load_model()
+        except Exception as e:
+            logger.error(f"Model loading failed during __init__: {e}")
+            # self.is_loaded will remain False
+
+    def _load_model(self) -> None:
+        """Load the trained Random Forest model."""
+        model_path = Path(settings.MODEL_PATH)
+        if not model_path.exists():
+            logger.warning(
+                f"Model file not found at {model_path}, creating dummy model."
+            )
+            self._create_dummy_model()
+        else:
+            try:
                 self.model = joblib.load(model_path)
                 logger.info(f"Successfully loaded model from {model_path}")
-                logger.info(f"Loaded model type: {type(self.model)}")
-                logger.info(
-                    "Model object loaded. Details logging skipped to avoid potential version conflict errors during __repr__."
-                )
                 self.is_loaded = True
-            logger.info("Model loading process finished.")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            raise
+            except Exception as e:
+                logger.error(
+                    f"Error loading model from {model_path}: {e}", exc_info=True
+                )
+                logger.warning("Creating dummy model as fallback due to loading error.")
+                self._create_dummy_model()  # Fallback to dummy if loading fails
+        logger.info(f"Model loading process finished. Model loaded: {self.is_loaded}")
 
     def _create_dummy_model(self) -> None:
         """Create a dummy model for demonstration."""
@@ -64,91 +104,206 @@ class BBBPredictor:
         self.model.fit(X_dummy, y_dummy)
         self.is_loaded = True
 
-    def smiles_to_fingerprint(self, smiles: str) -> NDArray[np.int_]:
-        """Convert SMILES to Morgan fingerprint."""
+    def _calculate_molecular_properties(
+        self, mol: Optional[Chem.Mol]
+    ) -> Dict[str, Any]:
+        """Calculate physicochemical properties and structural alerts for a molecule."""
+        props: Dict[str, Any] = {
+            "mw": None,
+            "logp": None,
+            "tpsa": None,
+            "rot_bonds": None,
+            "h_acceptors": None,
+            "h_donors": None,
+            "frac_csp3": None,
+            "molar_refractivity": None,
+            "log_s_esol": None,
+            "gi_absorption": "N/A",
+            "lipinski_passes": None,
+            "pains_alerts": 0,
+            "brenk_alerts": 0,
+            "heavy_atoms": None,
+            "mol_formula": None,
+        }
+
+        if mol is None:
+            return props
+
         try:
-            # Detailed logging of the input SMILES string
-            logger.info(f"Attempting to parse SMILES: '{smiles}' (raw)")
-            logger.info(f"Attempting to parse SMILES: {repr(smiles)} (repr)")
-            logger.info(f"Type of SMILES input: {type(smiles)}")
+            props["mw"] = Descriptors.MolWt(mol)
+            props["logp"] = Crippen.MolLogP(mol)
+            props["tpsa"] = Descriptors.TPSA(mol)
+            props["h_acceptors"] = Lipinski.NumHAcceptors(mol)
+            props["h_donors"] = Lipinski.NumHDonors(mol)
+            props["rot_bonds"] = Lipinski.NumRotatableBonds(mol)
+            props["mol_formula"] = rdMolDescriptors.CalcMolFormula(mol)
+            props["heavy_atoms"] = mol.GetNumHeavyAtoms()
+            props["frac_csp3"] = Descriptors.FractionCSP3(mol)
+            props["molar_refractivity"] = Crippen.MolMR(mol)
 
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                raise ValueError(f"Invalid SMILES: {smiles}")
-
-            # Generate Morgan fingerprint
-            fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-                mol, radius=settings.FP_RADIUS, nBits=settings.FP_NBITS
-            )
-
-            # Convert to numpy array
-            fp_array: NDArray[np.int_] = np.array(list(fp), dtype=np.int_)
-            return fp_array
-
-        except Exception as e:
-            logger.error(f"Error generating fingerprint for {smiles}: {e}")
-            raise
-
-    def calculate_fingerprint_hash(self, fingerprint: NDArray[np.int_]) -> str:
-        """Calculate hash of fingerprint for caching."""
-        fp_bytes: bytes = fingerprint.tobytes()
-        return hashlib.md5(fp_bytes).hexdigest()
-
-    def predict_single(self, smiles: str) -> Tuple[float, str, float, NDArray[np.int_]]:
-        """
-        Predict BBB permeability for a single molecule.
-
-        Returns:
-            Tuple of (probability, class, confidence, fingerprint)
-        """
-        if not self.is_loaded:
-            raise RuntimeError("Model not loaded")
-        assert self.model is not None  # Ensure model is not None for Mypy
-
-        # Generate fingerprint
-        fingerprint = self.smiles_to_fingerprint(smiles)
-
-        # Make prediction
-        fp_reshaped = fingerprint.reshape(1, -1)
-        probability = self.model.predict_proba(fp_reshaped)[
-            0, 1
-        ]  # Probability of class 1 (permeable)
-
-        # Determine class
-        prediction_class = "permeable" if probability >= 0.5 else "non_permeable"
-
-        # Calculate confidence (distance from decision boundary)
-        confidence = abs(probability - 0.5) * 2
-
-        return probability, prediction_class, confidence, fingerprint
-
-    def predict_batch(
-        self, smiles_list: List[str]
-    ) -> List[Tuple[float, str, float, NDArray[np.int_]]]:
-        """Predict BBB permeability for multiple molecules."""
-        if not self.is_loaded:
-            raise RuntimeError("Model not loaded")
-        assert self.model is not None  # Ensure model is not None for Mypy
-
-        results: List[Tuple[float, str, float, NDArray[np.int_]]] = []
-        for smiles in smiles_list:
-            try:
-                result = self.predict_single(smiles)
-                results.append(result)
-            except Exception as e:
-                logger.warning(f"Failed to predict for {smiles}: {e}")
-                # Return default values for failed predictions
-                results.append(
-                    (0.0, "unknown", 0.0, np.zeros(settings.FP_NBITS, dtype=np.int_))
+            # ESOL LogS
+            # Formula: 0.16 - 0.63*logp - 0.0062*mw + 0.066*rot - 0.74*fr_csp3
+            if all(
+                props[k] is not None for k in ["logp", "mw", "rot_bonds", "frac_csp3"]
+            ):
+                props["log_s_esol"] = (
+                    0.16
+                    - (0.63 * props["logp"])
+                    - (0.0062 * props["mw"])
+                    + (0.066 * props["rot_bonds"])
+                    - (0.74 * props["frac_csp3"])
                 )
 
+            # GI Absorption
+            if props["tpsa"] is not None and props["rot_bonds"] is not None:
+                props["gi_absorption"] = (
+                    "High"
+                    if props["tpsa"] <= 130 and props["rot_bonds"] <= 10
+                    else "Low"
+                )
+
+            # Lipinski's Rule of Five
+            if all(
+                props[k] is not None for k in ["h_donors", "h_acceptors", "mw", "logp"]
+            ):
+                props["lipinski_passes"] = (
+                    props["h_donors"] <= 5
+                    and props["h_acceptors"] <= 10
+                    and props["mw"] < 500
+                    and props["logp"] < 5
+                )
+
+            # PAINS and Brenk alerts
+            if self.pains_catalog:
+                pains_matches = self.pains_catalog.GetMatches(mol)
+                props["pains_alerts"] = len(pains_matches)
+            else:
+                props["pains_alerts"] = 0  # Default if catalog not loaded
+
+            if self.brenk_catalog:
+                brenk_matches = self.brenk_catalog.GetMatches(mol)
+                props["brenk_alerts"] = len(brenk_matches)
+                # Optionally, log more details about Brenk matches if needed for debugging
+                # if brenk_matches:
+                #     for match in brenk_matches:
+                #         logger.debug(f"Brenk alert: {match.GetDescription()}")
+            else:
+                # This path should ideally not be taken if constructor guarantees loading
+                props["brenk_alerts"] = 0
+
+            # Molecular Formula
+            props["mol_formula"] = Descriptors.rdMolDescriptors.CalcMolFormula(mol)
+        except Exception as e:
+            logger.error(
+                f"Error calculating properties for a molecule: {e}", exc_info=True
+            )
+            # Keep default None/0/"N/A" values for properties if calculation fails for any reason
+            pass  # Individual property calculation errors will result in None for that property
+
+        return props
+
+    async def predict_smiles_data(self, smiles: str) -> Dict[str, Any]:
+        """Process a single SMILES string for BBB prediction and molecular properties."""
+
+        if not self.is_loaded:
+            logger.error("Model not loaded, cannot perform BBB prediction.")
+            raise RuntimeError("Model not loaded")
+
+        result: Dict[str, Any] = {
+            "input_smiles": smiles,
+            "status": "error_processing",
+            "bbb_probability": None,
+            "bbb_class": "unknown",
+            "bbb_confidence": None,
+            **self._calculate_molecular_properties(None),
+        }
+
+        # Handle empty SMILES input first
+        if not smiles:
+            logger.warning("Input SMILES string is empty.")
+            result["status"] = "error_empty_smiles"
+            result["error"] = "Input SMILES string is empty."
+            return result
+
+        logger.info(f"Processing SMILES: {repr(smiles)}")
+        mol: Optional[Chem.Mol] = None
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                result["status"] = "error_invalid_smiles"
+                result["error"] = (
+                    "Invalid SMILES string provided. RDKit could not parse it."
+                )
+                logger.warning(f"Invalid SMILES: {smiles}. RDKit Mol object is None.")
+                return result
+        except Exception as e_parse:  # This catches parsing errors
+            result["status"] = "error_parsing_smiles"
+            logger.error(f"Error parsing SMILES '{smiles}': {e_parse}", exc_info=True)
+            return result
+
+        # Calculate properties now that we have a valid Mol object
+        calculated_props = self._calculate_molecular_properties(mol)
+        result.update(calculated_props)
+
+        try:
+            fp = self._prepare_fingerprint(mol)
+            if fp is None:
+                result["status"] = "error_fingerprint_generation"
+                result["error"] = "Failed to generate fingerprint for the molecule."
+                logger.error(f"Fingerprint generation failed for SMILES: {smiles}")
+                return result
+
+            # Predict probability
+            probability = self.model.predict_proba(fp.reshape(1, -1))[0, 1]
+            prediction_class = "permeable" if probability >= 0.5 else "non_permeable"
+            confidence = abs(probability - 0.5) * 2
+
+            result.update(
+                {
+                    "bbb_probability": probability,
+                    "bbb_class": prediction_class,
+                    "bbb_confidence": confidence,
+                    "status": "success",
+                }
+            )
+
+        except Exception as e_predict:
+            result["status"] = "error_bbb_prediction"
+            logger.error(
+                f"Error during BBB prediction for {smiles}: {e_predict}", exc_info=True
+            )
+            return result
+
+        return result
+
+    def _prepare_fingerprint(
+        self, mol: Optional[Chem.Mol]
+    ) -> Optional[NDArray[np.bool_]]:
+        """Convert an RDKit Mol object to a Morgan fingerprint if the mol is valid."""
+        if mol is None:
+            return None
+        try:
+            fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(
+                mol, settings.FP_RADIUS, nBits=settings.FP_NBITS
+            )
+            return np.array(fp, dtype=bool)
+        except Exception as e:
+            logger.error(f"Error generating fingerprint: {e}", exc_info=True)
+            return None
+
+    async def predict_batch(self, smiles_list: List[str]) -> List[Dict[str, Any]]:
+        """Process a batch of SMILES strings for BBB prediction and properties."""
+        results: List[Dict[str, Any]] = []
+        for smiles in smiles_list:
+            single_result = await self.predict_smiles_data(smiles)
+            results.append(single_result)
         return results
 
     def get_feature_importance(self, top_n: int = 20) -> List[Tuple[int, float]]:
         """Get top N most important features from the model."""
         if not self.is_loaded:
             raise RuntimeError("Model not loaded")
-        assert self.model is not None  # Ensure model is not None for Mypy
+        assert self.model is not None
 
         importances: NDArray[np.float64] = self.model.feature_importances_
         indices: NDArray[np.int_] = np.argsort(importances)[::-1][:top_n]
