@@ -5,6 +5,7 @@ Batch processing endpoints for CSV uploads and job management.
 import logging
 import uuid
 import pandas as pd
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import unicodedata
@@ -887,44 +888,41 @@ async def batch_predict_csv(
 
         # Use the created_at from job_data for consistency in response
         created_at_str = str(job_data["created_at"])
-        # Remove colon from timezone offset if present, e.g., +00:00 -> +0000, for %z compatibility
+
+        # 1. Normalize timezone colon: +HH:MM -> +HHMM
         if len(created_at_str) > 6 and created_at_str[-3] == ":":
             created_at_str = created_at_str[:-3] + created_at_str[-2:]
-        # Ensure there are 6 digits for microseconds if a decimal point is present
-        if "." in created_at_str:
-            parts = created_at_str.split(".")
-            if len(parts) == 2:
-                main_part = parts[0]
-                frac_part_full = parts[1]
-                # Separate fractional seconds from timezone offset
-                frac_seconds = ""
-                tz_offset = ""
-                if "+" in frac_part_full:
-                    idx = frac_part_full.find("+")
-                    frac_seconds = frac_part_full[:idx]
-                    tz_offset = frac_part_full[idx:]
-                elif "-" in frac_part_full and not frac_part_full.startswith(
-                    "-"
-                ):  # Ensure it's a timezone minus, not negative time part
-                    idx = frac_part_full.find("-")
-                    frac_seconds = frac_part_full[:idx]
-                    tz_offset = frac_part_full[idx:]
-                else:  # Assuming 'Z' or no offset, or offset already handled
-                    frac_seconds = frac_part_full.rstrip("Z")
-                    if frac_part_full.endswith("Z"):
-                        tz_offset = "Z"
 
-                frac_seconds = frac_seconds[:6].ljust(
-                    6, "0"
-                )  # Pad/truncate to 6 digits
-                created_at_str = f"{main_part}.{frac_seconds}{tz_offset}"
-
-        # Handle 'Z' for UTC explicitly as strptime's %z might not always handle it well across Python versions/platforms
+        # 2. Normalize 'Z' to '+0000'
         if created_at_str.endswith("Z"):
             created_at_str = created_at_str[:-1] + "+0000"
 
+        # 3. If no timezone offset is present, assume UTC and append '+0000'
+        # A timezone offset looks like [+-]HHMM (5 characters)
+        tz_pattern = re.compile(r"[+-]\d{4}$")
+        if not tz_pattern.search(created_at_str):
+            created_at_str += "+0000"
+
+        # 4. Separate the guaranteed timezone suffix (last 5 chars)
+        tz_suffix = created_at_str[-5:]
+        datetime_part_before_tz = created_at_str[:-5]
+
+        # 5. Handle fractional seconds and determine final format string
+        final_format_string = ""
+        if "." in datetime_part_before_tz:
+            main_dt_part, fractional_digits = datetime_part_before_tz.split(".", 1)
+            # Ensure fractional seconds are 6 digits
+            fractional_digits = fractional_digits[:6].ljust(6, "0")
+            # Reconstruct the string with normalized fractional seconds and timezone
+            processed_created_at_str = f"{main_dt_part}.{fractional_digits}{tz_suffix}"
+            final_format_string = "%Y-%m-%dT%H:%M:%S.%f%z"
+        else:
+            # No fractional seconds
+            processed_created_at_str = f"{datetime_part_before_tz}{tz_suffix}"
+            final_format_string = "%Y-%m-%dT%H:%M:%S%z"
+
         created_at_for_response = datetime.strptime(
-            created_at_str, "%Y-%m-%dT%H:%M:%S.%f%z"
+            processed_created_at_str, final_format_string
         )
         logger.info(
             f"Created batch job {job_id} with {total_molecules} molecules, record successfully inserted."
