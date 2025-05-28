@@ -130,7 +130,7 @@ async def process_batch_job(
             else:
                 # Handle SMILES that are invalid before even calling the predictor
                 error_res = {
-                    "input_smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
+                    "smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
                     "molecule_name": molecule_name,
                     "status": "error_invalid_input_smiles",
                     "bbb_probability": None,
@@ -265,7 +265,7 @@ async def process_batch_job(
                     # Prepare data for batch_prediction_items table
                     item_to_insert = {
                         "batch_id": job_id,
-                        "smiles": res_dict.get("input_smiles"),
+                        "smiles": res_dict.get("smiles"),
                         "row_number": i
                         + 1,  # Assuming 1-based for now, adjust if original row numbers are available
                         "probability": res_dict.get("bbb_probability"),
@@ -365,7 +365,7 @@ async def process_batch_job(
                 for i in range(len(results_from_batch_predict), len(valid_input_items)):
                     missing_item_data = valid_input_items[i]
                     error_res = {
-                        "input_smiles": missing_item_data.get(
+                        "smiles": missing_item_data.get(
                             "smiles", "UNKNOWN_SMILES_ERROR"
                         ),
                         "molecule_name": missing_item_data.get("molecule_name", ""),

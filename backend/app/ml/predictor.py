@@ -210,7 +210,7 @@ class BBBPredictor:
             raise RuntimeError("Model not loaded")
 
         result: Dict[str, Any] = {
-            "input_smiles": smiles,
+            "smiles": smiles,
             "status": "error_processing",
             "bbb_probability": None,
             "bbb_class": "unknown",
