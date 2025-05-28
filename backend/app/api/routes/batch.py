@@ -6,7 +6,7 @@ import logging
 import uuid
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, cast
+from typing import List, Dict, Any, Optional
 import unicodedata
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -469,16 +469,40 @@ async def batch_predict_csv(
                 f"Job {job_id}: 'molecule_name' and 'compound_name' not found. Using empty strings for molecule names."
             )
 
-        smiles_data: List[Dict[str, Any]] = cast(
-            List[Dict[str, Any]],
-            df[["smiles", "molecule_name"]].to_dict(orient="records"),
-        )
-        total_molecules = len(smiles_data)
+        smiles_data_list: List[Dict[str, Any]] = []
+        for _, row in df.iterrows():
+            item_data: Dict[str, Any] = {}
+            raw_smiles_field = str(
+                row.get("smiles", "")
+            )  # Get the raw content of the SMILES column
+
+            # Check if the problematic pattern ',""' exists,
+            # which indicates a combined SMILES string and description.
+            if ',""' in raw_smiles_field:
+                # Split the string at the first occurrence of ',\""'
+                # The first part should be the SMILES string.
+                parts = raw_smiles_field.split(',""', 1)
+                actual_smiles = parts[0]
+            else:
+                # If the pattern isn't found, assume the field is already just the SMILES string
+                # or can be cleaned directly.
+                actual_smiles = raw_smiles_field
+
+            # Remove any leading/trailing whitespace and then any surrounding quotes
+            # from the determined SMILES string.
+            item_data["smiles"] = actual_smiles.strip().strip('"')
+
+            if "molecule_name" in row:
+                item_data["molecule_name"] = str(row.get("molecule_name", ""))
+
+            smiles_data_list.append(item_data)
+
+        total_molecules = len(smiles_data_list)
         logger.info(
             f"Job {job_id}: Extracted {total_molecules} records for processing."
         )
 
-        if not smiles_data:
+        if not smiles_data_list:
             raise HTTPException(status_code=400, detail="No valid SMILES found in CSV")
 
         logger.info(
@@ -504,10 +528,13 @@ async def batch_predict_csv(
 
         # Pass the full list of SMILES data to a single background task
         logger.info(
-            f"Job {job_id}: About to add task. Length of smiles_data being passed: {len(smiles_data)}"
+            f"Job {job_id}: About to add task. Length of smiles_data being passed: {len(smiles_data_list)}"
         )
         background_tasks.add_task(
-            process_batch_job, job_id, smiles_data, predictor  # Pass full smiles_data
+            process_batch_job,
+            job_id,
+            smiles_data_list,
+            predictor,  # Pass full smiles_data
         )
 
         created_at = datetime.utcnow()
