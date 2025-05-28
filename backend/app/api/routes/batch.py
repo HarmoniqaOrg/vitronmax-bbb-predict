@@ -8,6 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import unicodedata
+import asyncio
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import io
@@ -123,9 +124,42 @@ async def process_batch_job(
                             "error", "Invalid or empty SMILES string provided in input."
                         ),
                     }
-                    db.table("batch_prediction_items").insert(
-                        item_to_insert_error
-                    ).execute()
+                    # Retry logic for inserting error item
+                    max_retries = 3
+                    base_delay = 0.1  # seconds
+                    for attempt in range(max_retries):
+                        try:
+                            db.table("batch_prediction_items").insert(
+                                item_to_insert_error
+                            ).execute()
+                            break  # Success, exit retry loop
+                        except Exception as e_retry_insert_error:
+                            # Check if it's a PostgREST foreign key violation (code 23503)
+                            is_fk_violation = False
+                            if hasattr(e_retry_insert_error, "code") and e_retry_insert_error.code == "23503":  # type: ignore
+                                is_fk_violation = True
+                            elif hasattr(e_retry_insert_error, "json") and callable(
+                                e_retry_insert_error.json
+                            ):
+                                try:
+                                    error_json = e_retry_insert_error.json()
+                                    if (
+                                        isinstance(error_json, dict)
+                                        and error_json.get("code") == "23503"
+                                    ):
+                                        is_fk_violation = True
+                                except Exception:
+                                    pass  # Ignore parsing errors, not a PostgREST error we can handle here
+
+                            if is_fk_violation and attempt < max_retries - 1:
+                                delay = base_delay * (2**attempt)
+                                logger.warning(
+                                    f"Job {job_id}: FK violation inserting error item for '{s}', attempt {attempt + 1}/{max_retries}. Retrying in {delay:.2f}s... Error: {e_retry_insert_error}"
+                                )
+                                await asyncio.sleep(delay)
+                            else:
+                                # Final attempt failed or not a FK violation we can retry
+                                raise e_retry_insert_error  # Re-raise the original or last error
                 except Exception as e_insert_error_item:
                     logger.error(
                         f"Job {job_id}: Failed to insert error item for '{s}' into batch_prediction_items: {e_insert_error_item}"
@@ -201,10 +235,51 @@ async def process_batch_job(
                         k: v for k, v in item_to_insert.items() if v is not None
                     }
 
+                    # Outer try for the entire insertion process of a single item, including retries
                     try:
-                        db.table("batch_prediction_items").insert(
-                            item_to_insert_cleaned
-                        ).execute()
+                        # Retry logic for inserting processed item
+                        max_retries = 3
+                        base_delay = 0.1  # seconds
+                        for attempt in range(max_retries):
+                            try:  # Inner try for a single attempt
+                                db.table("batch_prediction_items").insert(
+                                    item_to_insert_cleaned
+                                ).execute()
+                                break  # Success, exit retry loop
+                            except (
+                                Exception
+                            ) as e_retry_insert_item:  # Inner except for a single attempt
+                                is_fk_violation = False
+                                # Check for PostgREST/Supabase specific FK violation (code '23503')
+                                if hasattr(e_retry_insert_item, "code") and e_retry_insert_item.code == "23503":  # type: ignore
+                                    is_fk_violation = True
+                                elif hasattr(e_retry_insert_item, "json") and callable(
+                                    e_retry_insert_item.json
+                                ):
+                                    try:
+                                        error_json = e_retry_insert_item.json()
+                                        if (
+                                            isinstance(error_json, dict)
+                                            and error_json.get("code") == "23503"
+                                        ):
+                                            is_fk_violation = True
+                                    except Exception:
+                                        pass  # Ignore parsing errors if .json() fails or structure is unexpected
+
+                                if is_fk_violation and attempt < max_retries - 1:
+                                    delay = base_delay * (2**attempt)
+                                    logger.warning(
+                                        f"Job {job_id}: FK violation inserting item for '{res_dict.get('input_smiles')}', attempt {attempt + 1}/{max_retries}. Retrying in {delay:.2f}s... Error: {e_retry_insert_item}"
+                                    )
+                                    await asyncio.sleep(delay)
+                                else:
+                                    # Final attempt failed or not a FK violation we can retry
+                                    logger.error(
+                                        f"Job {job_id}: Failed to insert item for '{res_dict.get('input_smiles')}' into batch_prediction_items after {attempt + 1} attempts. Error: {e_retry_insert_item}"
+                                    )
+                                    # Re-raise the exception to be caught by the outer try-except block
+                                    raise e_retry_insert_item
+                    # This except block is for the outer try that wraps the retry loop
                     except Exception as e_insert_item:
                         logger.error(
                             f"Job {job_id}: Failed to insert item for '{res_dict.get('input_smiles')}' into batch_prediction_items: {e_insert_item}"
@@ -283,12 +358,55 @@ async def process_batch_job(
                                 "Predictor did not return a result for this item.",
                             ),
                         }
-                        db.table("batch_prediction_items").insert(
-                            item_to_insert_missing
-                        ).execute()
-                    except Exception as e_insert_missing_item:
+
+                        # Retry logic for inserting missing item placeholder
+                        max_retries_missing = 3
+                        base_delay_missing = 0.1  # seconds
+                        for attempt_missing in range(max_retries_missing):
+                            try:
+                                db.table("batch_prediction_items").insert(
+                                    item_to_insert_missing
+                                ).execute()
+                                break  # Success from insert
+                            except Exception as e_retry_missing_item:
+                                is_fk_violation_missing = False
+                                if hasattr(e_retry_missing_item, "code") and e_retry_missing_item.code == "23503":  # type: ignore
+                                    is_fk_violation_missing = True
+                                elif hasattr(e_retry_missing_item, "json") and callable(
+                                    e_retry_missing_item.json
+                                ):
+                                    try:
+                                        error_json_missing = e_retry_missing_item.json()
+                                        if (
+                                            isinstance(error_json_missing, dict)
+                                            and error_json_missing.get("code")
+                                            == "23503"
+                                        ):
+                                            is_fk_violation_missing = True
+                                    except Exception:
+                                        pass  # Ignore parsing errors if .json() fails or structure is unexpected
+
+                                if (
+                                    is_fk_violation_missing
+                                    and attempt_missing < max_retries_missing - 1
+                                ):
+                                    delay_missing = base_delay_missing * (
+                                        2**attempt_missing
+                                    )
+                                    logger.warning(
+                                        f"Job {job_id}: FK violation inserting missing item placeholder for '{missing_item_data.get('smiles')}', attempt {attempt_missing + 1}/{max_retries_missing}. Retrying in {delay_missing:.2f}s... Error: {e_retry_missing_item}"
+                                    )
+                                    await asyncio.sleep(delay_missing)
+                                else:  # This 'else' means: (not FK violation) OR (is FK violation AND last attempt)
+                                    logger.error(
+                                        f"Job {job_id}: Failed to insert missing item placeholder for '{missing_item_data.get('smiles')}' after {attempt_missing + 1} attempts or due to non-retriable error: {e_retry_missing_item}"
+                                    )
+                                    break  # Break from retry loop, error logged. Do not re-raise.
+                    except (
+                        Exception
+                    ) as e_insert_missing_item_outer:  # Outer catch-all for this item's processing
                         logger.error(
-                            f"Job {job_id}: Failed to insert missing item for '{missing_item_data.get('smiles')}' into batch_prediction_items: {e_insert_missing_item}"
+                            f"Job {job_id}: General failure processing missing item placeholder for '{missing_item_data.get('smiles')}': {e_insert_missing_item_outer}"
                         )
 
         logger.info(
@@ -657,7 +775,95 @@ async def batch_predict_csv(
             "estimated_completion_time": estimated_completion.isoformat(),
         }
 
-        db.table("batch_jobs").insert(job_data).execute()
+        insert_response = db.table("batch_jobs").insert(job_data).execute()
+
+        # Check for success: data attribute exists and is populated
+        if hasattr(insert_response, "data") and insert_response.data:
+            logger.info(
+                f"Job {job_id}: Successfully inserted job record into batch_jobs: {insert_response.data}"
+            )
+
+            # Attempt to read back the record to confirm visibility
+            try:
+                read_back_response = (
+                    db.table("batch_jobs")
+                    .select("job_id")
+                    .eq("job_id", job_id)
+                    .limit(1)
+                    .execute()
+                )
+                if hasattr(read_back_response, "data") and read_back_response.data:
+                    logger.info(
+                        f"Job {job_id}: Successfully read back job record from batch_jobs."
+                    )
+                else:
+                    # This case is critical if it happens
+                    error_detail = "Read-back after insert failed or returned no data."
+                    if (
+                        hasattr(read_back_response, "error")
+                        and read_back_response.error
+                    ):
+                        error_detail += f" DB Error: {read_back_response.error.message if hasattr(read_back_response.error, 'message') else str(read_back_response.error)}"
+                    logger.error(
+                        f"Job {job_id}: {error_detail} Raw read_back_response: {read_back_response}"
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Failed to confirm job record persistence after insert.",
+                    )
+            except Exception as e_read_back:
+                logger.error(
+                    f"Job {job_id}: Exception during read-back check: {e_read_back}",
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error confirming job record persistence: {e_read_back}",
+                )
+        else:
+            # It's an error if we don't have data or data is empty
+            error_msg_for_user = "Insert operation failed."  # Default for HTTPException
+            log_msg_parts = [
+                f"Job {job_id}: Failed to insert job record into batch_jobs."
+            ]
+
+            # Try to get specific error from PostgrestAPIResponse structure
+            if hasattr(insert_response, "error") and insert_response.error:
+                pg_error = insert_response.error
+                err_code = getattr(pg_error, "code", "N/A")
+                # Use getattr for message as well, falling back to str(pg_error)
+                err_msg = getattr(pg_error, "message", str(pg_error))
+                log_msg_parts.append(
+                    f"PostgREST Error Code: {err_code}, Message: {err_msg}."
+                )
+                error_msg_for_user = (
+                    f"Database Error: {err_msg}"
+                    if err_msg != str(pg_error)
+                    else "Database error occurred."
+                )
+            # Check for a general message attribute (e.g., from ClientResponse)
+            elif hasattr(insert_response, "message") and insert_response.message:
+                err_msg = str(insert_response.message)
+                log_msg_parts.append(f"Response Message: {err_msg}.")
+                error_msg_for_user = f"Operation Error: {err_msg}"
+            # Check if data attribute exists but is empty (and no .error was found)
+            elif hasattr(insert_response, "data") and not insert_response.data:
+                log_msg_parts.append(
+                    "Insert operation returned no data and no explicit error attribute."
+                )
+                error_msg_for_user = "Database insert failed (no data returned)."
+            # Fallback for other response types or if it's an unhandled structure
+            else:
+                log_msg_parts.append(
+                    f"Unknown response structure. Raw response: {str(insert_response)}."
+                )
+                error_msg_for_user = (
+                    "Insert failed with an unexpected response from the database."
+                )
+
+            log_msg_parts.append(f"Response type: {type(insert_response)}.")
+            logger.error(" ".join(log_msg_parts))
+            raise HTTPException(status_code=500, detail=error_msg_for_user)
 
         # Pass the full list of SMILES data to a single background task
         logger.info(
@@ -670,13 +876,18 @@ async def batch_predict_csv(
             predictor,  # Pass full smiles_data
         )
 
-        created_at = datetime.utcnow()
-        logger.info(f"Created batch job {job_id} with {total_molecules} molecules")
+        # Use the created_at from job_data for consistency in response
+        # Pydantic will parse the ISO string from job_data["created_at"] into a datetime object.
+        created_at_for_response = datetime.fromisoformat(job_data["created_at"])
+        logger.info(
+            f"Created batch job {job_id} with {total_molecules} molecules, record successfully inserted."
+        )
 
         return BatchJobResponse(
             job_id=job_id,
+            job_name=job_name,  # Also include job_name in response
             status=JobStatus.PENDING,
-            created_at=created_at,
+            created_at=created_at_for_response,
             estimated_completion_time=estimated_completion,
             total_molecules=total_molecules,
             detail="Batch job created and queued for processing.",
