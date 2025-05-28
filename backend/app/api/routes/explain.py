@@ -108,26 +108,34 @@ async def explain_prediction(
 
         # If no prediction result provided, generate one
         if not request.prediction_result:
-            probability, pred_class, confidence, fingerprint = predictor.predict_single(
-                request.smiles
-            )
+            prediction_data = await predictor.predict_smiles_data(request.smiles)
+            if prediction_data.get("status") != "success":
+                error_detail = prediction_data.get(
+                    "error", "Prediction failed for unknown reasons."
+                )
+                raise HTTPException(
+                    status_code=400, detail=f"Prediction failed: {error_detail}"
+                )
 
-            prediction_result = {
-                "bbb_probability": probability,
-                "prediction_class": pred_class,
-                "confidence_score": confidence,
+            # Extract only the necessary fields for the explanation context
+            prediction_result_for_explain = {
+                "bbb_probability": prediction_data.get("bbb_probability"),
+                "prediction_class": prediction_data.get("bbb_class"),
+                "confidence_score": prediction_data.get("bbb_confidence"),
+                # Include other relevant data if needed by the explanation prompt
+                "molecular_weight": prediction_data.get("molecular_weight"),
+                "logp": prediction_data.get("logp"),
+                "tpsa": prediction_data.get("tpsa"),
             }
         else:
-            prediction_result = request.prediction_result
+            prediction_result_for_explain = request.prediction_result
 
-        logger.info(f"Generating explanation for SMILES: {request.smiles}")
-
-        # Generate streaming explanation
+        # Generate explanation stream
         return StreamingResponse(
             generate_explanation_stream(
                 request.smiles,
-                prediction_result,
-                request.context or "",  # Ensure context is str
+                prediction_result_for_explain,  # Use the potentially enriched dict
+                request.context,
             ),
             media_type="text/event-stream",
             headers={
@@ -138,6 +146,10 @@ async def explain_prediction(
                 "Access-Control-Allow-Headers": "Content-Type",
             },
         )
+
+    except HTTPException as http_exc:
+        logger.warning(f"HTTP exception: {http_exc}")
+        raise
 
     except ValueError as e:
         logger.warning(f"Invalid input for explanation: {e}")

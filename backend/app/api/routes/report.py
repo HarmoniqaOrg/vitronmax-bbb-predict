@@ -222,15 +222,32 @@ async def generate_report_from_smiles(
 
     try:
         # Make prediction
-        probability, pred_class, confidence, fingerprint = predictor.predict_single(
-            request.smiles
-        )
+        prediction_result = await predictor.predict_smiles_data(request.smiles)
 
+        if prediction_result.get("status") != "success":
+            error_detail = prediction_result.get(
+                "error", "Prediction failed for unknown reasons."
+            )
+            raise HTTPException(
+                status_code=400, detail=f"Prediction failed: {error_detail}"
+            )
+
+        # Ensure all expected keys are present for the report
+        # Defaulting to safe values if keys are missing, though 'success' status should guarantee them.
         prediction_data = {
-            "bbb_probability": probability,
-            "prediction_class": pred_class,
-            "confidence_score": confidence,
-            "processing_time_ms": 0.0,
+            "bbb_probability": prediction_result.get("bbb_probability", 0.0),
+            "prediction_class": prediction_result.get("bbb_class", "unknown"),
+            "confidence_score": prediction_result.get("bbb_confidence", 0.0),
+            "processing_time_ms": prediction_result.get("processing_time_ms", 0.0),
+            # Add other properties if your report uses them directly from prediction_data
+            "molecular_weight": prediction_result.get("molecular_weight"),
+            "logp": prediction_result.get("logp"),
+            "tpsa": prediction_result.get("tpsa"),
+            "h_bond_donors": prediction_result.get("h_bond_donors"),
+            "h_bond_acceptors": prediction_result.get("h_bond_acceptors"),
+            "rotatable_bonds": prediction_result.get("rotatable_bonds"),
+            "pains_alerts": prediction_result.get("pains_alerts", 0),
+            "brenk_alerts": prediction_result.get("brenk_alerts", 0),
         }
 
         # Generate PDF report

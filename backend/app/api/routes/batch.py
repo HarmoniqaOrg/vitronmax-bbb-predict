@@ -103,8 +103,8 @@ async def process_batch_job(
             logger.info(
                 f"Job {job_id}: Calling predictor.predict_batch for {len(smiles_for_predictor_call)} SMILES strings."
             )
-            results_from_batch_predict: List[Dict[str, Any]] = predictor.predict_batch(
-                smiles_for_predictor_call
+            results_from_batch_predict: List[Dict[str, Any]] = (
+                await predictor.predict_batch(smiles_for_predictor_call)
             )
             logger.info(
                 f"Job {job_id}: Received {len(results_from_batch_predict)} results from predictor.predict_batch."

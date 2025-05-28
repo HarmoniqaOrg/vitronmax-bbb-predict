@@ -254,6 +254,7 @@ class BBBPredictor:
                 return result
 
             # Predict probability
+            assert self.model is not None, "Model should be loaded if is_loaded is True"
             probability = self.model.predict_proba(fp.reshape(1, -1))[0, 1]
             prediction_class = "permeable" if probability >= 0.5 else "non_permeable"
             confidence = abs(probability - 0.5) * 2
