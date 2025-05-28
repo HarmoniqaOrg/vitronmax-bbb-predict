@@ -94,6 +94,43 @@ async def process_batch_job(
                 final_results_for_csv.append(error_res)
                 failed_count += 1
 
+                # Insert error record for initially invalid SMILES into batch_prediction_items
+                try:
+                    item_to_insert_error = {
+                        "batch_id": job_id,
+                        "smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
+                        "row_number": len(
+                            final_results_for_csv
+                        ),  # or a more robust row counter if available
+                        "probability": None,
+                        "model_version": settings.MODEL_VERSION,  # Default model version
+                        "molecular_weight": None,
+                        "log_p": None,
+                        "tpsa": None,
+                        "num_rotatable_bonds": None,
+                        "num_h_acceptors": None,
+                        "num_h_donors": None,
+                        "fraction_csp3": None,
+                        "molar_refractivity": None,
+                        "log_s_esol": None,
+                        "gi_absorption": None,
+                        "lipinski_rule_of_five_passes": None,
+                        "pains_alert_count": None,
+                        "brenk_alert_count": None,
+                        "num_heavy_atoms": None,
+                        "molecular_formula": None,
+                        "error_message": error_res.get(
+                            "error", "Invalid or empty SMILES string provided in input."
+                        ),
+                    }
+                    db.table("batch_prediction_items").insert(
+                        item_to_insert_error
+                    ).execute()
+                except Exception as e_insert_error_item:
+                    logger.error(
+                        f"Job {job_id}: Failed to insert error item for '{s}' into batch_prediction_items: {e_insert_error_item}"
+                    )
+
         logger.info(
             f"Job {job_id}: Found {len(smiles_for_predictor_call)} valid SMILES to process, {failed_count} initially invalid items."
         )
@@ -128,6 +165,50 @@ async def process_batch_job(
                             res_dict["error"] = res_dict.get(
                                 "status", "prediction_error"
                             )
+
+                    # Prepare data for batch_prediction_items table
+                    item_to_insert = {
+                        "batch_id": job_id,
+                        "smiles": res_dict.get("input_smiles"),
+                        "row_number": i
+                        + 1,  # Assuming 1-based for now, adjust if original row numbers are available
+                        "probability": res_dict.get("bbb_probability"),
+                        "model_version": res_dict.get(
+                            "model_version", settings.MODEL_VERSION
+                        ),
+                        "molecular_weight": res_dict.get("mw"),
+                        "log_p": res_dict.get("logp"),
+                        "tpsa": res_dict.get("tpsa"),
+                        "num_rotatable_bonds": res_dict.get("rot_bonds"),
+                        "num_h_acceptors": res_dict.get("h_acceptors"),
+                        "num_h_donors": res_dict.get("h_donors"),
+                        "fraction_csp3": res_dict.get("frac_csp3"),
+                        "molar_refractivity": res_dict.get("molar_refractivity"),
+                        "log_s_esol": res_dict.get("log_s_esol"),
+                        "gi_absorption": res_dict.get("gi_absorption"),
+                        "lipinski_rule_of_five_passes": res_dict.get("lipinski_passes"),
+                        "pains_alert_count": res_dict.get("pains_alerts"),
+                        "brenk_alert_count": res_dict.get("brenk_alerts"),
+                        "num_heavy_atoms": res_dict.get("heavy_atoms"),
+                        "molecular_formula": res_dict.get("mol_formula"),
+                        "error_message": (
+                            res_dict.get("error")
+                            if res_dict.get("status") != "success"
+                            else None
+                        ),
+                    }
+                    item_to_insert_cleaned = {
+                        k: v for k, v in item_to_insert.items() if v is not None
+                    }
+
+                    try:
+                        db.table("batch_prediction_items").insert(
+                            item_to_insert_cleaned
+                        ).execute()
+                    except Exception as e_insert_item:
+                        logger.error(
+                            f"Job {job_id}: Failed to insert item for '{res_dict.get('input_smiles')}' into batch_prediction_items: {e_insert_item}"
+                        )
             else:
                 # This is an unexpected internal error if counts don't match
                 logger.error(
@@ -169,6 +250,46 @@ async def process_batch_job(
                         "brenk_alerts": None,
                     }
                     final_results_for_csv.append(error_res)
+
+                    # Insert error record for missing predictor result into batch_prediction_items
+                    try:
+                        item_to_insert_missing = {
+                            "batch_id": job_id,
+                            "smiles": missing_item_data.get(
+                                "smiles", "UNKNOWN_SMILES_ERROR"
+                            ),
+                            "row_number": len(results_from_batch_predict)
+                            + (i - len(results_from_batch_predict))
+                            + 1,  # Adjust row numbering
+                            "probability": None,
+                            "model_version": settings.MODEL_VERSION,
+                            "molecular_weight": None,
+                            "log_p": None,
+                            "tpsa": None,
+                            "num_rotatable_bonds": None,
+                            "num_h_acceptors": None,
+                            "num_h_donors": None,
+                            "fraction_csp3": None,
+                            "molar_refractivity": None,
+                            "log_s_esol": None,
+                            "gi_absorption": None,
+                            "lipinski_rule_of_five_passes": None,
+                            "pains_alert_count": None,
+                            "brenk_alert_count": None,
+                            "num_heavy_atoms": None,
+                            "molecular_formula": None,
+                            "error_message": error_res.get(
+                                "error",
+                                "Predictor did not return a result for this item.",
+                            ),
+                        }
+                        db.table("batch_prediction_items").insert(
+                            item_to_insert_missing
+                        ).execute()
+                    except Exception as e_insert_missing_item:
+                        logger.error(
+                            f"Job {job_id}: Failed to insert missing item for '{missing_item_data.get('smiles')}' into batch_prediction_items: {e_insert_missing_item}"
+                        )
 
         logger.info(
             f"Job {job_id}: All items processed. Successfully predicted: {processed_count}. Total failed (input or prediction): {failed_count}."
@@ -330,19 +451,27 @@ async def get_all_batch_jobs() -> List[BatchStatusResponse]:
             parsed_estimated_completion_time = None
             estimated_completion_time_str = job_data.get("estimated_completion_time")
             if estimated_completion_time_str:
+                # Remove colon from timezone offset if present (e.g., +00:00 -> +0000)
+                # Check if the string is long enough and has a colon at the third to last position
                 if (
-                    len(estimated_completion_time_str) > 6
+                    len(estimated_completion_time_str) > 5
                     and estimated_completion_time_str[-3] == ":"
                 ):
                     estimated_completion_time_str = (
                         estimated_completion_time_str[:-3]
                         + estimated_completion_time_str[-2:]
                     )
-                # Ensure the string is not empty before parsing
-                if estimated_completion_time_str:
+                try:
+                    # Parse the datetime string using strptime
                     parsed_estimated_completion_time = datetime.strptime(
                         estimated_completion_time_str, iso_format_with_offset
                     )
+                except ValueError as e_parse:
+                    logger.error(
+                        f"Error parsing datetime string '{estimated_completion_time_str}' for field 'estimated_completion_time' in job {job_data['job_id']}: {e_parse}. Allowing Pydantic to attempt parsing."
+                    )
+                    # If strptime fails, we let Pydantic try. If Pydantic also fails, it will raise its own validation error.
+                    pass  # Let Pydantic handle it if our specific parsing fails
 
             jobs.append(
                 BatchStatusResponse(
@@ -476,22 +605,23 @@ async def batch_predict_csv(
                 row.get("smiles", "")
             )  # Get the raw content of the SMILES column
 
-            # Check if the problematic pattern ',""' exists,
-            # which indicates a combined SMILES string and description.
-            if ',""' in raw_smiles_field:
-                # Split the string at the first occurrence of ',\""'
-                # The first part should be the SMILES string.
-                parts = raw_smiles_field.split(',""', 1)
-                actual_smiles = parts[0]
+            # If the SMILES field itself contains a pattern like SMILES_string,"description"...
+            # we want to extract just the SMILES_string part.
+            # The pattern is: a comma, followed by a double quote, introducing the description.
+            if (
+                ', "' in raw_smiles_field
+            ):  # Check for comma followed by ONE double quote
+                # Split at the first occurrence of ',"'
+                parts = raw_smiles_field.split(',"', 1)
+                actual_smiles = parts[0]  # This will be the part before ',"'
             else:
-                # If the pattern isn't found, assume the field is already just the SMILES string
-                # or can be cleaned directly.
                 actual_smiles = raw_smiles_field
 
-            # Remove any leading/trailing whitespace and then any surrounding quotes
-            # from the determined SMILES string.
+            # Clean the extracted SMILES string
+            # Remove any leading/trailing whitespace and then any surrounding quotes.
             item_data["smiles"] = actual_smiles.strip().strip('"')
 
+            # Handle molecule_name, ensuring it's a string or None
             if "molecule_name" in row:
                 item_data["molecule_name"] = str(row.get("molecule_name", ""))
 
