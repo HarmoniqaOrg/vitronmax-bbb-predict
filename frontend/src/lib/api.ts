@@ -68,7 +68,7 @@ export const apiClient = {
 
   // Single molecule prediction
   predictMolecule: async (data: SinglePredictionFormData): Promise<MoleculeResult> => {
-    const response = await api.post('/predict_fp', data);
+    const response = await api.post('/predict', data);
     return response.data;
   },
 
@@ -174,14 +174,6 @@ export interface PlatformStatistics {
 
 export const getPlatformStatistics = async (): Promise<PlatformStatistics> => {
   const response = await api.get<PlatformStatistics>('/platform-statistics');
-  return response.data;
-};
-
-// Function to convert SMILES to PDB
-export const convertSmilesToPdb = async (
-  smiles: string,
-): Promise<PdbOutput> => {
-  const response = await api.post<PdbOutput>('/utils/smiles-to-pdb', { smiles });
   return response.data;
 };
 
