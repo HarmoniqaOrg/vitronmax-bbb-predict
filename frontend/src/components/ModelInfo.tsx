@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { ExternalLink } from 'lucide-react'; // Assuming lucide-react for icons
+import { ExternalLink, ShieldCheck } from 'lucide-react';
 
 export function ModelInfo() {
   const metrics = [
@@ -14,7 +14,10 @@ export function ModelInfo() {
 
   return (
     <Card className="w-full my-8 border hover:shadow-md transition-all">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-4 items-center text-center">
+        <div className="mb-4">
+          <ShieldCheck className="h-10 w-10 text-primary" />
+        </div>
         <CardTitle className="text-2xl font-semibold">Model Performance & Validation</CardTitle>
         <CardDescription className="text-md">
           Our Blood-Brain Barrier (BBB) permeability prediction model utilizes a Random Forest algorithm
