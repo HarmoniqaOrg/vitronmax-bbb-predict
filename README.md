@@ -17,6 +17,20 @@ A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) p
 - 95th-percentile latency < 800ms
 - 80%+ test coverage
 
+## 🧬 Model Validation
+
+The VitronMax Blood-Brain Barrier (BBB) permeability prediction model has been rigorously validated on an external dataset of 7807 molecules, achieving excellent performance:
+
+- **AUC-ROC**: 0.932
+- **AUC-PR**: 0.959
+- **Accuracy**: 0.85
+- **F1-score (BBB+)**: 0.89
+- **F1-score (BBB-)**: 0.78
+
+The model uses a Random Forest algorithm with Morgan molecular fingerprints and has been validated through 5-fold cross-validation (AUC-ROC: 0.925 ± 0.011) and on an external test set.
+
+For complete documentation on the validation methodology, detailed performance metrics, and applicability domain, see the [model validation documentation](docs/model_validation.md).
+
 ## 🛠 Tech Stack
 
 ### Backend
