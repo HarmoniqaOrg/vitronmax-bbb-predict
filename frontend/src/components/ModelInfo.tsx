@@ -1,46 +1,55 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+import { ExternalLink } from 'lucide-react'; // Assuming lucide-react for icons
 
 export function ModelInfo() {
+  const metrics = [
+    { label: 'AUC-ROC', value: '0.932' },
+    { label: 'AUC-PR', value: '0.959' },
+    { label: 'Accuracy', value: '0.85' },
+    { label: 'F1 (BBB+)', value: '0.89' },
+    { label: 'F1 (BBB-)', value: '0.78' },
+  ];
+
   return (
-    <Card className="w-full my-4">
-      <CardHeader>
-        <CardTitle>BBB Prediction Model Performance</CardTitle>
-        <CardDescription>
-          Random Forest with Morgan molecular fingerprints. Validated on 7807 external molecules.
+    <Card className="w-full my-8 border hover:shadow-md transition-all">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-2xl font-semibold">Model Performance & Validation</CardTitle>
+        <CardDescription className="text-md">
+          Our Blood-Brain Barrier (BBB) permeability prediction model utilizes a Random Forest algorithm
+          with Morgan molecular fingerprints. It has been rigorously validated on an external dataset of 7807 molecules.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 mb-4">
-          <div className="flex flex-col items-center p-2 border rounded-lg">
-            <span className="text-xs font-medium text-muted-foreground">AUC-ROC</span>
-            <Badge variant="secondary" className="mt-1 text-sm">0.932</Badge>
-          </div>
-          <div className="flex flex-col items-center p-2 border rounded-lg">
-            <span className="text-xs font-medium text-muted-foreground">AUC-PR</span>
-            <Badge variant="secondary" className="mt-1 text-sm">0.959</Badge>
-          </div>
-          <div className="flex flex-col items-center p-2 border rounded-lg">
-            <span className="text-xs font-medium text-muted-foreground">Accuracy</span>
-            <Badge variant="secondary" className="mt-1 text-sm">0.85</Badge>
-          </div>
-          <div className="flex flex-col items-center p-2 border rounded-lg">
-            <span className="text-xs font-medium text-muted-foreground">F1 (BBB+)</span>
-            <Badge variant="secondary" className="mt-1 text-sm">0.89</Badge>
-          </div>
-          <div className="flex flex-col items-center p-2 border rounded-lg">
-            <span className="text-xs font-medium text-muted-foreground">F1 (BBB-)</span>
-            <Badge variant="secondary" className="mt-1 text-sm">0.78</Badge>
-          </div>
-        </div>
-        <p className="text-sm text-center text-muted-foreground">
-          Optimal classification threshold: 0.531. For full details, see the 
-          <a href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/model_validation.md" 
-             className="ml-1 underline hover:text-primary" target="_blank" rel="noopener noreferrer">
-            complete validation documentation
-          </a>.
+        <p className="text-sm text-muted-foreground mb-4">
+          Key performance metrics on the external test set:
         </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
+          {metrics.map((metric) => (
+            <div 
+              key={metric.label} 
+              className="flex flex-col items-center justify-center p-4 bg-muted/50 border border-border/50 rounded-lg hover:shadow-md transition-shadow"
+            >
+              <span className="text-sm font-medium text-muted-foreground mb-1">{metric.label}</span>
+              <Badge variant="outline" className="text-lg font-semibold px-3 py-1">{metric.value}</Badge>
+            </div>
+          ))}
+        </div>
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground mb-2">
+            Optimal classification threshold: 0.531.
+          </p>
+          <a 
+            href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/model_validation.md" 
+            className="inline-flex items-center text-sm font-medium text-primary hover:underline"
+            target="_blank" 
+            rel="noopener noreferrer"
+          >
+            View Complete Validation Documentation
+            <ExternalLink className="ml-1.5 h-4 w-4" />
+          </a>
+        </div>
       </CardContent>
     </Card>
   );
