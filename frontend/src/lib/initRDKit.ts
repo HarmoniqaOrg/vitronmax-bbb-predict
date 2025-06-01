@@ -1,6 +1,7 @@
 // frontend/src/utils/initRDKit.ts
 import initModule from "@rdkit/rdkit";
 import type { RDKitModule } from '@/components/batch/SmilesStructure';
+import rdkitWasmUrl from '@rdkit/rdkit/RDKit_minimal.wasm?url';
 
 /*  tiny wrapper that memo-caches the compiled module */
 export const loadRDKit = (() => {
@@ -16,10 +17,8 @@ export const loadRDKit = (() => {
       locateFile: (file: string, scriptDirectory: string) => {
         // console.log(`[RDKit locateFile] file: ${file}, scriptDirectory: ${scriptDirectory}`);
         if (file.endsWith(".wasm")) {
-          // Vite copies the wasm to /assets and this URL should resolve it.
-          // The path "@rdkit/rdkit/RDKit_minimal.wasm" points to the file within the package.
-          // Vite's asset handling should process this to the final fingerprinted asset path.
-          return new URL("@rdkit/rdkit/RDKit_minimal.wasm", import.meta.url).href;
+          // Use the URL provided by Vite's ?url import
+          return rdkitWasmUrl;
         }
         return file;
       },
