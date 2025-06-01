@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Download, Filter, ArrowUpDown } from 'lucide-react';
+import SmilesStructure from './SmilesStructure'; // Added import
 import type { MoleculeResult } from '@/lib/types';
 
 interface BatchResultsTableProps {
@@ -250,6 +251,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                       {sortBy === 'smiles' && <ArrowUpDown className="ml-2 h-4 w-4" />}
                     </Button>
                   </TableHead>
+                  <TableHead className="w-[180px]">Structure</TableHead>
                   <TableHead className="w-[150px]">
                     <Button variant="ghost" onClick={() => handleSort('name')}>
                       Molecule Name
@@ -301,6 +303,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                   filteredAndSortedResults.map((result, index) => (
                     <TableRow key={`${result.smiles}-${index}`}>
                       <TableCell className="font-mono text-xs break-all">{result.smiles}</TableCell>
+                      <TableCell><SmilesStructure smiles={result.smiles} /></TableCell>
                       <TableCell>{result.molecule_name || 'N/A'}</TableCell>
                       <TableCell className="text-right">{result.bbb_probability?.toFixed(3)}</TableCell>
                       <TableCell>{getPredictionBadge(result)}</TableCell>
@@ -326,7 +329,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center">
+                    <TableCell colSpan={11} className="h-24 text-center"> {/* Adjusted colSpan for new column */}
                       No results found.
                     </TableCell>
                   </TableRow>

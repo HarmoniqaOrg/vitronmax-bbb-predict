@@ -27,32 +27,33 @@ const BatchResults = () => {
     const resultsArr: MoleculeResult[] = [];
     
     const headerMap: { [key: string]: keyof MoleculeResult | string } = {
-      smiles: 'smiles',
-      molecule_name: 'molecule_name',
-      bbb_probability: 'bbb_probability',
-      prediction_class: 'prediction_class',
-      confidence_score: 'confidence_score',
-      molecular_weight: 'molecular_weight',
-      logp: 'logp',
-      tpsa: 'tpsa',
-      h_bond_donors: 'h_bond_donors',
-      h_bond_acceptors: 'h_bond_acceptors',
-      rotatable_bonds: 'rotatable_bonds',
-      pains_alerts: 'pains_alerts',
-      brenk_alerts: 'brenk_alerts',
-      formal_charge: 'formal_charge',
-      refractivity: 'refractivity',
-      num_rings: 'num_rings',
-      exact_mw: 'exact_mw',
-      num_radical_electrons: 'num_radical_electrons',
-      num_valence_electrons: 'num_valence_electrons',
-      error: 'error',
+      'input_smiles': 'smiles', // CSV header 'input_smiles' maps to 'smiles' property
+      'molecule_name': 'molecule_name',
+      'bbb_probability': 'bbb_probability',
+      'prediction_class': 'prediction_class', // Kept as it's in MoleculeResult & original map; parser handles if not in CSV
+      'bbb_confidence': 'confidence_score', // CSV header 'bbb_confidence' maps to 'confidence_score' property
+      'mw': 'molecular_weight',           // CSV header 'mw' maps to 'molecular_weight' property
+      'logp': 'logp',
+      'tpsa': 'tpsa',
+      'h_bond_donors': 'h_bond_donors',
+      'h_bond_acceptors': 'h_bond_acceptors',
+      'rotatable_bonds': 'rotatable_bonds',
+      'pains_alerts': 'pains_alerts',
+      'brenk_alerts': 'brenk_alerts',
+      'formal_charge': 'formal_charge',
+      'refractivity': 'refractivity',
+      'num_rings': 'num_rings',
+      'exact_mw': 'exact_mw',
+      // num_radical_electrons & num_valence_electrons are not in the confirmed sample CSV headers.
+      // If they appear in CSVs with those exact names, they can be added back here.
+      // e.g., 'num_radical_electrons': 'num_radical_electrons',
+      'error': 'error',
     };
 
-    const smilesHeader = headers.find(h => h === 'smiles');
+    const smilesHeader = headers.find(h => h === 'input_smiles'); // Check for 'input_smiles' as per updated headerMap
     if (!smilesHeader) {
-        console.error("CSV Parse Error: 'smiles' header not found.");
-        toast({ title: 'CSV Parsing Error', description: "Mandatory 'smiles' column not found in results.", variant: 'destructive' });
+        console.error("CSV Parse Error: 'input_smiles' header not found.");
+        toast({ title: 'CSV Parsing Error', description: "Mandatory 'input_smiles' column not found in results.", variant: 'destructive' });
         return [];
     }
 
