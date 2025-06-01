@@ -16,7 +16,7 @@ export interface RDKitModule {
 }
 
 // Import the new RDKit loader utility
-import { loadRDKit } from '@/lib/initRDKIT';
+import { loadRDKit } from '@/lib/initRDKit.ts';
 
 interface Props {
   smiles: string;
