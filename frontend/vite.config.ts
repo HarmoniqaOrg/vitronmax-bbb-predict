@@ -2,6 +2,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import wasm from "vite-plugin-wasm";
 import { componentTagger } from "lovable-tagger";
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
@@ -14,6 +15,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     nodePolyfills(),
+    wasm(),
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),
