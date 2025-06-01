@@ -39,6 +39,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html/
 
 # Copy custom Nginx configuration
 COPY nginx.default.conf /etc/nginx/conf.d/default.conf
+COPY wasm_mime.conf /etc/nginx/conf.d/wasm_mime.conf
 
 # Expose port 80 (nginx default)
 EXPOSE 80
