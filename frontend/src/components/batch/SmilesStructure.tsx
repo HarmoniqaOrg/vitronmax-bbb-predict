@@ -8,11 +8,19 @@ interface SmilesStructureProps {
 }
 
 const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, height = 100 }) => {
-  const svgRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     if (svgRef.current && smiles) {
-      svgRef.current.innerHTML = ''; // Clear previous SVG
+      // For SVG, clearing is handled by drawer.draw on a fresh element or if it handles clearing itself.
+      // If not, ensure the SVG element is empty before drawing if re-using the same SVG element for different SMILES.
+      // However, with React's reconciliation, this component instance is likely fresh or props changed, re-triggering useEffect.
+      // Let's ensure the target is clean if the smiles string changes for an existing component instance.
+      if (svgRef.current) {
+        while (svgRef.current.firstChild) {
+          svgRef.current.removeChild(svgRef.current.firstChild);
+        }
+      }
       const drawer = new Drawer({
         width: width,
         height: height,
@@ -21,16 +29,18 @@ const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, 
       drawer.draw(smiles, svgRef.current, 'light', (err: unknown) => {
         if (err) {
           console.error('Error drawing SMILES:', err);
-          // Optionally, display an error message or placeholder in the div
+          // Optionally, display an error message or placeholder
+          // For an SVG, injecting HTML div is not valid. We could draw a text element or a placeholder SVG.
+          // For now, we'll rely on the console error and the SVG remaining blank or showing a partial structure if drawer fails gracefully.
           if (svgRef.current) {
-            svgRef.current.innerHTML = `<div style="width:${width}px; height:${height}px; display:flex; align-items:center; justify-content:center; border:1px dashed #ccc; font-size:12px; color:#888;">Invalid SMILES</div>`;
+            // Example: svgRef.current.textContent = 'Error'; // Not ideal for SVG
           }
         }
       });
     }
   }, [smiles, width, height]);
 
-  return <div ref={svgRef} style={{ width: width, height: height }} />;
+  return <svg ref={svgRef} style={{ width: width, height: height }} />;
 };
 
 export default SmilesStructure;

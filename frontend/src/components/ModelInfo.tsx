@@ -44,7 +44,7 @@ export function ModelInfo() {
             Optimal classification threshold: 0.531.
           </p>
           <a 
-            href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/model_validation.md" 
+            href="https://github.com/HarmoniqaOrg/vitronmax-bbb-predict/blob/main/docs/model-validation.md" 
             className="inline-flex items-center text-sm font-medium text-primary hover:underline"
             target="_blank" 
             rel="noopener noreferrer"

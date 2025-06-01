@@ -29,7 +29,7 @@ The VitronMax Blood-Brain Barrier (BBB) permeability prediction model has been r
 
 The model uses a Random Forest algorithm with Morgan molecular fingerprints and has been validated through 5-fold cross-validation (AUC-ROC: 0.925 ± 0.011) and on an external test set.
 
-For complete documentation on the validation methodology, detailed performance metrics, and applicability domain, see the [model validation documentation](docs/model_validation.md).
+For complete documentation on the validation methodology, detailed performance metrics, and applicability domain, see the [model validation documentation](docs/model-validation.md).
 
 ## 🛠 Tech Stack
 

@@ -11,13 +11,13 @@ The VitronMax model is a Blood-Brain Barrier (BBB) permeability prediction syste
 **Training Set**:
 - Number of compounds: 2050 molecules
 - Format: SMILES with binary annotations (1: BBB+, 0: BBB-)
-- Source: `predictions.csv` file
+- Source: `predictions.csv` file : https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/BBBP.csv
 - Class distribution: Balanced to optimize learning
 
 **External Test Set (B3DB)**:
 - Number of compounds: 7807 molecules
 - Format: SMILES with binary annotations and logBB values
-- Source: `B3DB.csv` file (Blood-Brain Barrier Database)
+- Source: `B3DB.csv` file (Blood-Brain Barrier Database) : https://github.com/theochem/B3DB
 - Class distribution: 4956 BBB+ (63.5%) and 2851 BBB- (36.5%)
 
 ### 1.2 Data Preprocessing
