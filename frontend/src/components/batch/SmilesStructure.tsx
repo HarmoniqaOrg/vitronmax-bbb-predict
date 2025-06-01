@@ -16,7 +16,7 @@ export interface RDKitModule {
 }
 
 // Import the new RDKit loader utility
-import { loadRDKit } from '@/lib/initRDKIT.ts'; // Corrected casing
+import { loadRDKit } from '@/lib/initRDKit.ts'; // Reverted to lowercase for CI compatibility
 
 interface Props {
   smiles: string;
