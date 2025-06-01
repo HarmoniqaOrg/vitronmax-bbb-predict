@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { Drawer } from 'smiles-drawer';
 
 interface SmilesStructureProps {
@@ -10,7 +10,7 @@ interface SmilesStructureProps {
 const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, height = 100 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (svgRef.current && smiles) {
       // For SVG, clearing is handled by drawer.draw on a fresh element or if it handles clearing itself.
       // If not, ensure the SVG element is empty before drawing if re-using the same SVG element for different SMILES.
