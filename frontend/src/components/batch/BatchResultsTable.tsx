@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Search, Download, Filter, ArrowUpDown } from 'lucide-react';
 import SmilesStructure from './SmilesStructure'; // Added import
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MoleculeResult } from '@/lib/types';
 
 interface BatchResultsTableProps {
@@ -33,6 +34,9 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
   const [filterClass, setFilterClass] = useState<string>('all');
   const [sortBy, setSortBy] = useState<keyof MoleculeResult | 'name'>('bbb_probability');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const ROW_ESTIMATE_SIZE = 75; // Estimated height for a row in pixels
 
   const handleSort = (column: keyof MoleculeResult | 'name') => {
     if (sortBy === column) {
@@ -75,6 +79,13 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
 
     return filtered;
   }, [results, searchTerm, filterClass, sortBy, sortOrder]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredAndSortedResults.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_ESTIMATE_SIZE,
+    overscan: 5, // Render 5 items above and below the visible area
+  });
 
   const getPredictionBadge = (result: MoleculeResult) => {
     if (result.error) {
@@ -196,7 +207,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent ref={parentRef} style={{ height: '600px', overflowY: 'auto' }}>
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -243,7 +254,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
           {/* Results Table */}
           <div className="border rounded-md">
             <Table>
-              <TableHeader>
+              <TableHeader style={{ position: 'sticky', top: 0, zIndex: 1, background: 'hsl(var(--card))' }}>
                 <TableRow>
                   <TableHead className="w-[150px]">
                     <Button variant="ghost" onClick={() => handleSort('smiles')}>
@@ -298,10 +309,24 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                   <TableHead className="w-[100px]">Status</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {filteredAndSortedResults.length > 0 ? (
-                  filteredAndSortedResults.map((result, index) => (
-                    <TableRow key={`${result.smiles}-${index}`}>
+              <TableBody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const result = filteredAndSortedResults[virtualRow.index];
+                  return (
+                    <TableRow 
+                      key={virtualRow.key} 
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement} // Important for dynamic row heights if ever needed
+                      className={result.error ? 'bg-red-50 dark:bg-red-900/30' : ''}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
                       <TableCell className="font-mono text-xs break-all">{result.smiles}</TableCell>
                       <TableCell><SmilesStructure smiles={result.smiles} /></TableCell>
                       <TableCell>{result.molecule_name || 'N/A'}</TableCell>
@@ -326,14 +351,15 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                         )}
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
+                  );
+                })}
+                {rowVirtualizer.getVirtualItems().length === 0 && filteredAndSortedResults.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="h-24 text-center"> {/* Adjusted colSpan for new column */}
                       No results found.
                     </TableCell>
                   </TableRow>
-                )}
+                ) : null}
               </TableBody>
             </Table>
           </div>

@@ -28,11 +28,12 @@ const BatchResults = () => {
     
     const headerMap: { [key: string]: keyof MoleculeResult | string } = {
       'input_smiles': 'smiles', // CSV header 'input_smiles' maps to 'smiles' property
+      'smiles': 'smiles',         // CSV header 'smiles' also maps to 'smiles' property
       'molecule_name': 'molecule_name',
       'bbb_probability': 'bbb_probability',
-      'prediction_class': 'prediction_class', // Kept as it's in MoleculeResult & original map; parser handles if not in CSV
-      'bbb_confidence': 'confidence_score', // CSV header 'bbb_confidence' maps to 'confidence_score' property
-      'mw': 'molecular_weight',           // CSV header 'mw' maps to 'molecular_weight' property
+      'prediction_class': 'prediction_class',
+      'bbb_confidence': 'confidence_score',
+      'mw': 'molecular_weight',
       'logp': 'logp',
       'tpsa': 'tpsa',
       'h_bond_donors': 'h_bond_donors',
@@ -44,16 +45,17 @@ const BatchResults = () => {
       'refractivity': 'refractivity',
       'num_rings': 'num_rings',
       'exact_mw': 'exact_mw',
-      // num_radical_electrons & num_valence_electrons are not in the confirmed sample CSV headers.
-      // If they appear in CSVs with those exact names, they can be added back here.
-      // e.g., 'num_radical_electrons': 'num_radical_electrons',
       'error': 'error',
     };
 
-    const smilesHeader = headers.find(h => h === 'input_smiles'); // Check for 'input_smiles' as per updated headerMap
-    if (!smilesHeader) {
-        console.error("CSV Parse Error: 'input_smiles' header not found.");
-        toast({ title: 'CSV Parsing Error', description: "Mandatory 'input_smiles' column not found in results.", variant: 'destructive' });
+    let actualSmilesHeader: string | undefined = headers.find(h => h === 'input_smiles');
+    if (!actualSmilesHeader) {
+      actualSmilesHeader = headers.find(h => h === 'smiles');
+    }
+
+    if (!actualSmilesHeader) {
+        console.error("CSV Parse Error: Neither 'input_smiles' nor 'smiles' header found.");
+        toast({ title: 'CSV Parsing Error', description: "Mandatory SMILES column (expected 'input_smiles' or 'smiles') not found in results.", variant: 'destructive' });
         return [];
     }
 
