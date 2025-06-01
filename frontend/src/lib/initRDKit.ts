@@ -1,7 +1,6 @@
 // frontend/src/utils/initRDKit.ts
 import initModule from "@rdkit/rdkit";
 import type { RDKitModule } from '@/components/batch/SmilesStructure';
-import rdkitWasmUrl from '@rdkit/rdkit/RDKit_minimal.wasm?url';
 
 /*  tiny wrapper that memo-caches the compiled module */
 export const loadRDKit = (() => {
@@ -17,10 +16,13 @@ export const loadRDKit = (() => {
       locateFile: (file: string, scriptDirectory: string) => {
         // console.log(`[RDKit locateFile] file: ${file}, scriptDirectory: ${scriptDirectory}`);
         if (file.endsWith(".wasm")) {
-          // Use the URL provided by Vite's ?url import
-          return rdkitWasmUrl;
+          // Assume vite-plugin-wasm places the Wasm file (e.g., RDKit_minimal.wasm or a version of it)
+          // in the /assets/ directory. The 'file' argument will be 'RDKit_minimal.wasm'.
+          return `/assets/${file}`;
         }
-        return file;
+        // Fallback for other files, though RDKit primarily requests the .wasm file.
+        // scriptDirectory is the path to the directory where the JS file is.
+        return scriptDirectory + file;
       },
     }) as Promise<RDKitModule>; // Cast to ensure type compatibility with our RDKitModule interface
 
