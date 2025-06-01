@@ -328,7 +328,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                       }}
                     >
                       <TableCell className="font-mono text-xs break-all">{result.smiles}</TableCell>
-                      <TableCell><SmilesStructure smiles={result.smiles} /></TableCell>
+                      <TableCell><SmilesStructure key={result.smiles + '-' + virtualRow.index} smiles={result.smiles} /></TableCell>
                       <TableCell>{result.molecule_name || 'N/A'}</TableCell>
                       <TableCell className="text-right">{result.bbb_probability?.toFixed(3)}</TableCell>
                       <TableCell>{getPredictionBadge(result)}</TableCell>
