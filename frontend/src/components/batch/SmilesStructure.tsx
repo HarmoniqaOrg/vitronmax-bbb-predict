@@ -5,7 +5,7 @@ type Status = "loading" | "ok" | "error";
 
 // Define interfaces for the RDKit module and molecule objects based on usage
 export interface RDKitMol {
-  get_svg: (options?: { width?: number; height?: number; [key: string]: unknown }) => string;
+  get_svg: (options?: string | { width?: number; height?: number; [key: string]: unknown }) => string; // Allow string for JSON options
   delete: () => void;
   // Add other RDKit Mol methods if they become necessary
 }
@@ -16,7 +16,7 @@ export interface RDKitModule {
 }
 
 // Import the new RDKit loader utility
-import { loadRDKit } from '@/lib/initRDKit.ts';
+import { loadRDKit } from '@/lib/initRDKIT.ts'; // Corrected casing
 
 interface Props {
   smiles: string;
@@ -61,7 +61,7 @@ export const SmilesStructure: React.FC<Props> = ({
             throw new Error('Molecule could not be parsed from SMILES.');
           }
           // console.log(`[SmilesStructure] Molecule parsed for SMILES: ${smiles}. Generating SVG.`);
-          const svg = mol.get_svg({ width, height });
+          const svg = mol.get_svg(JSON.stringify({ width, height }));
           mol.delete(); // Important to free wasm memory
           
           if (!cancelled) {
