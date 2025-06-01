@@ -18,7 +18,7 @@ const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, 
         height: height,
       });
       
-      drawer.draw(smiles, svgRef.current, 'light', (err: any) => {
+      drawer.draw(smiles, svgRef.current, 'light', (err: unknown) => {
         if (err) {
           console.error('Error drawing SMILES:', err);
           // Optionally, display an error message or placeholder in the div
