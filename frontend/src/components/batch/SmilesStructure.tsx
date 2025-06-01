@@ -4,41 +4,19 @@ import React, { useEffect, useRef, useState } from "react";
 type Status = "loading" | "ok" | "error";
 
 // Define interfaces for the RDKit module and molecule objects based on usage
-interface RDKitMol {
+export interface RDKitMol {
   get_svg: (options?: { width?: number; height?: number; [key: string]: unknown }) => string;
   delete: () => void;
   // Add other RDKit Mol methods if they become necessary
 }
 
-interface RDKitModule {
+export interface RDKitModule {
   get_mol: (smiles: string, options?: unknown) => RDKitMol | null;
   // Add other RDKit module functions if they become necessary
 }
 
-let rdkitModule: RDKitModule | null = null;
-const initRDKit = async () => {
-  if (rdkitModule) return rdkitModule;
-  // dynamic import so the wasm is only fetched client-side
-  try {
-    // Use 'any' for the dynamically imported module's type due to complex/unpredictable default export signature.
-    // This is a pragmatic choice as precise typing for RDKit's dynamic Wasm import default can be challenging.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const RDKitEntry: any = await import('@rdkit/rdkit');
-    
-    if (typeof RDKitEntry.default === 'function') {
-      // The 'rdkitModule' variable itself is typed with RDKitModule interface
-      rdkitModule = await RDKitEntry.default(); 
-      console.log("RDKit module initialized successfully via default().");
-    } else {
-      console.error("[SmilesStructure] RDKitEntry.default is not a function. Module structure:", RDKitEntry);
-      throw new Error("RDKit's default export is not an initializer function.");
-    }
-  } catch (error) {
-    console.error("Failed to initialize RDKit module:", error);
-    throw error; // Re-throw to be caught by the caller in useEffect
-  }
-  return rdkitModule;
-};
+// Import the new RDKit loader utility
+import { loadRDKit } from '@/lib/initRDKIT';
 
 interface Props {
   smiles: string;
@@ -62,13 +40,14 @@ export const SmilesStructure: React.FC<Props> = ({
 
     // console.log(`[SmilesStructure] useEffect for SMILES: ${smiles}, Width: ${width}, Height: ${height}`);
 
-    initRDKit()
-      .then((RDKit) => {
-        if (cancelled) {
-          // console.log("[SmilesStructure] Effect cancelled before drawing.");
-          return;
-        }
-        if (!RDKit) {
+    const rdkit = loadRDKit();
+    rdkit.then((RDKit) => {
+      if (cancelled) {
+        // console.log("[SmilesStructure] Effect cancelled before drawing.");
+        return;
+      }
+      if (!RDKit) {
+        console.error("[SmilesStructure] RDKit module not available after init promise resolved.");
           console.error("[SmilesStructure] RDKit module not available after init promise resolved.");
           if (!cancelled) setStatus("error");
           return;
