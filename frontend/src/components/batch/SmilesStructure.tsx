@@ -1,71 +1,135 @@
-import React, { useLayoutEffect, useRef, useId, useState, useEffect } from 'react';
-import { Drawer } from 'smiles-drawer';
+/* SmilesStructure.tsx ----------------------------------------------------- */
+import React, { useEffect, useRef, useState } from "react";
 
-interface SmilesStructureProps {
+type Status = "loading" | "ok" | "error";
+
+// Define interfaces for the RDKit module and molecule objects based on usage
+interface RDKitMol {
+  get_svg: (options?: { width?: number; height?: number; [key: string]: unknown }) => string;
+  delete: () => void;
+  // Add other RDKit Mol methods if they become necessary
+}
+
+interface RDKitModule {
+  get_mol: (smiles: string, options?: unknown) => RDKitMol | null;
+  // Add other RDKit module functions if they become necessary
+}
+
+let rdkitModule: RDKitModule | null = null;
+const initRDKit = async () => {
+  if (rdkitModule) return rdkitModule;
+  // dynamic import so the wasm is only fetched client-side
+  try {
+    // Use 'any' for the dynamically imported module's type due to complex/unpredictable default export signature.
+    // This is a pragmatic choice as precise typing for RDKit's dynamic Wasm import default can be challenging.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const RDKitEntry: any = await import('@rdkit/rdkit');
+    
+    if (typeof RDKitEntry.default === 'function') {
+      // The 'rdkitModule' variable itself is typed with RDKitModule interface
+      rdkitModule = await RDKitEntry.default(); 
+      console.log("RDKit module initialized successfully via default().");
+    } else {
+      console.error("[SmilesStructure] RDKitEntry.default is not a function. Module structure:", RDKitEntry);
+      throw new Error("RDKit's default export is not an initializer function.");
+    }
+  } catch (error) {
+    console.error("Failed to initialize RDKit module:", error);
+    throw error; // Re-throw to be caught by the caller in useEffect
+  }
+  return rdkitModule;
+};
+
+interface Props {
   smiles: string;
   width?: number;
   height?: number;
 }
 
-const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, height = 100 }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const uniqueId = useId(); // Used for the SVG id attribute
-  const [drawError, setDrawError] = useState<boolean>(false);
+export const SmilesStructure: React.FC<Props> = ({
+  smiles,
+  width = 120,
+  height = 90,
+}) => {
+  const divRef = useRef<HTMLDivElement | null>(null); // Ref for the div that will host the SVG string
+  const [status, setStatus] = useState<Status>("loading");
+  const [svgString, setSvgString] = useState<string>("");
 
-  useLayoutEffect(() => {
-    setDrawError(false); // Reset error state on new SMILES or dimension change
-    // console.log(`[SmilesStructure] Effect for SMILES: ${smiles}, ID: ${uniqueId}`);
+  useEffect(() => {
+    let cancelled = false;
+    setStatus("loading");
+    setSvgString(""); // Clear previous SVG string
 
-    if (!svgRef.current || !svgRef.current.isConnected || !smiles) {
-      // console.log('[SmilesStructure] SVG ref not available, not connected, or no SMILES. Aborting.');
-      if (svgRef.current) {
-        svgRef.current.innerHTML = ''; // Clear if no SMILES to draw or SVG is unmounted
-      }
-      return;
-    }
+    // console.log(`[SmilesStructure] useEffect for SMILES: ${smiles}, Width: ${width}, Height: ${height}`);
 
-    const svgElement = svgRef.current;
-
-    // Always clear and re-draw on prop changes (smiles, width, height)
-    svgElement.innerHTML = ''; // Clear SVG content before any drawing attempt
-
-    try {
-      // console.log(`[SmilesStructure] Creating new Drawer and drawing SMILES: ${smiles}`);
-      const drawer = new Drawer({
-        width: width,
-        height: height,
-      });
-
-      drawer.draw(smiles, svgElement, 'light', (err: unknown) => {
-        if (err) {
-          console.error('[SmilesStructure] Error during SMILES drawing callback:', smiles, err);
-          setDrawError(true);
-        } else {
-          // console.log('[SmilesStructure] Successfully drawn:', smiles);
-          // No need to setDrawError(false) here as it's done at the start of the effect
+    initRDKit()
+      .then((RDKit) => {
+        if (cancelled) {
+          // console.log("[SmilesStructure] Effect cancelled before drawing.");
+          return;
         }
-      });
-    } catch (e) {
-      console.error('[SmilesStructure] Error instantiating Drawer or calling draw:', smiles, e);
-      setDrawError(true);
-    }
+        if (!RDKit) {
+          console.error("[SmilesStructure] RDKit module not available after init promise resolved.");
+          if (!cancelled) setStatus("error");
+          return;
+        }
 
-  }, [smiles, width, height, uniqueId]); // uniqueId is stable but good for completeness if component instance was reused
+        // console.log(`[SmilesStructure] RDKit initialized, attempting to draw SMILES: ${smiles}`);
+        try {
+          const mol = RDKit.get_mol(smiles);
+          if (!mol) {
+            console.error(`[SmilesStructure] Failed to parse SMILES: ${smiles}. RDKit.get_mol returned null.`);
+            throw new Error('Molecule could not be parsed from SMILES.');
+          }
+          // console.log(`[SmilesStructure] Molecule parsed for SMILES: ${smiles}. Generating SVG.`);
+          const svg = mol.get_svg({ width, height });
+          mol.delete(); // Important to free wasm memory
+          
+          if (!cancelled) {
+            // console.log(`[SmilesStructure] SVG generated for SMILES: ${smiles}. Setting state.`);
+            setSvgString(svg);
+            setStatus("ok");
+          }
+        } catch (err) {
+          console.error(`[SmilesStructure] RDKit-wasm draw error for SMILES: ${smiles}:`, err);
+          if (!cancelled) setStatus("error");
+        }
+      })
+      .catch((err) => {
+        console.error(`[SmilesStructure] RDKit-wasm init error:`, err);
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      // console.log(`[SmilesStructure] Cleanup effect for SMILES: ${smiles}`);
+      cancelled = true;
+    };
+  }, [smiles, width, height]);
 
   return (
-    <svg 
-      id={uniqueId} 
-      ref={svgRef} 
-      style={{ width: width, height: height, border: drawError ? '1px solid red' : undefined }}
-      aria-label={`Molecular structure for ${smiles}`}
+    <div
+      style={{
+        width,
+        height,
+        border:
+          status === "error" ? "1px solid #ef4444" : "1px solid #e2e8f0", // Red border for error, light gray otherwise
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: status === "loading" ? "#f9fafb" : "transparent", // Light gray background for loading
+        overflow: "hidden", // Prevent SVG from overflowing its container
+      }}
     >
-      {drawError && (
-        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="#dc2626" fontSize="12px" fontFamily="sans-serif">
-          Error
-        </text>
+      {status === "loading" && (
+        <span className="text-xs text-gray-400">Loading…</span>
       )}
-    </svg>
+      {status === "error" && (
+        <span className="text-xs text-red-500">Error</span> // Error text if drawing fails
+      )}
+      {/* Div to host the SVG generated by RDKit. It will be set via dangerouslySetInnerHTML */}
+      {status === "ok" && svgString && (
+        <div ref={divRef} dangerouslySetInnerHTML={{ __html: svgString }} />
+      )}
+    </div>
   );
 };
-
-export default SmilesStructure;

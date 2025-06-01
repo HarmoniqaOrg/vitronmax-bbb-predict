@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Download, Filter, ArrowUpDown } from 'lucide-react';
-import SmilesStructure from './SmilesStructure'; // Added import
+import { SmilesStructure } from '@/components/batch/SmilesStructure';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MoleculeResult } from '@/lib/types';
 
