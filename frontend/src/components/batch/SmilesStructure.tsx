@@ -9,65 +9,63 @@ interface SmilesStructureProps {
 
 const SmilesStructure: React.FC<SmilesStructureProps> = ({ smiles, width = 150, height = 100 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const uniqueId = useId();
-  const [isReadyToDraw, setIsReadyToDraw] = useState(false);
-  const [currentSmiles, setCurrentSmiles] = useState(''); // To track if SMILES changed for the drawing effect
+  const uniqueId = useId(); // Used for the SVG id attribute
+  const [drawError, setDrawError] = useState<boolean>(false);
 
-  // Phase 1: Ensure SVG is in DOM, clear it, and set ready flag.
   useLayoutEffect(() => {
-    // console.log(`[SmilesStructure P1] LayoutEffect for SMILES: ${smiles}, ID: ${uniqueId}`);
-    setCurrentSmiles(smiles); // Update currentSmiles for the drawing effect
+    setDrawError(false); // Reset error state on new SMILES or dimension change
+    // console.log(`[SmilesStructure] Effect for SMILES: ${smiles}, ID: ${uniqueId}`);
 
-    if (svgRef.current && svgRef.current.isConnected) {
-      // console.log('[SmilesStructure P1] SVG available, clearing and setting ready.');
-      // Clear previous content from the SVG element
-      while (svgRef.current.firstChild) {
-        svgRef.current.removeChild(svgRef.current.firstChild);
+    if (!svgRef.current || !svgRef.current.isConnected || !smiles) {
+      // console.log('[SmilesStructure] SVG ref not available, not connected, or no SMILES. Aborting.');
+      if (svgRef.current) {
+        svgRef.current.innerHTML = ''; // Clear if no SMILES to draw or SVG is unmounted
       }
-      setIsReadyToDraw(true);
-    } else {
-      // console.log('[SmilesStructure P1] SVG not available or not connected.');
-      setIsReadyToDraw(false); // Not ready if SVG not there
+      return;
     }
 
-    return () => {
-      // console.log(`[SmilesStructure P1 Cleanup] Resetting ready state for SMILES: ${smiles}`);
-      setIsReadyToDraw(false); // Reset ready state on unmount or when inputs change
-    };
-  // Rerun this layout effect if smiles, width, height, or uniqueId changes.
-  // uniqueId is stable for a component instance but included for completeness if it were dynamic.
-  }, [smiles, width, height, uniqueId]);
+    const svgElement = svgRef.current;
 
-  // Phase 2: Attempt to draw when the ready flag is set by the layout effect.
-  useEffect(() => {
-    // console.log(`[SmilesStructure P2] Draw Effect triggered. isReadyToDraw: ${isReadyToDraw}, currentSmiles: ${currentSmiles}`);
-    if (isReadyToDraw && svgRef.current && svgRef.current.isConnected && currentSmiles) {
-      // console.log('[SmilesStructure P2] Conditions met. Attempting to draw SMILES:', currentSmiles, 'on SVG:', svgRef.current);
-      try {
-        const drawer = new Drawer({
-          width: width,
-          height: height,
-        });
-      
-        drawer.draw(currentSmiles, svgRef.current, 'light', (err: unknown) => {
-          if (err) {
-            console.error('[SmilesStructure P2] Error during SMILES drawing callback:', currentSmiles, err);
-          } else {
-            // console.log('[SmilesStructure P2] Successfully drawn (or draw callback without error):', currentSmiles);
-          }
-        });
-      } catch (e) {
-        console.error('[SmilesStructure P2] Error instantiating or calling drawer.draw:', currentSmiles, e);
-      }
-    } else if (isReadyToDraw) {
-      // console.warn('[SmilesStructure P2] Was ready to draw, but other conditions not met. SMILES:', currentSmiles, 'SVG Ref:', svgRef.current, 'Connected:', svgRef.current?.isConnected);
+    // Always clear and re-draw on prop changes (smiles, width, height)
+    svgElement.innerHTML = ''; // Clear SVG content before any drawing attempt
+
+    try {
+      // console.log(`[SmilesStructure] Creating new Drawer and drawing SMILES: ${smiles}`);
+      const drawer = new Drawer({
+        width: width,
+        height: height,
+      });
+
+      drawer.draw(smiles, svgElement, 'light', (err: unknown) => {
+        if (err) {
+          console.error('[SmilesStructure] Error during SMILES drawing callback:', smiles, err);
+          setDrawError(true);
+        } else {
+          // console.log('[SmilesStructure] Successfully drawn:', smiles);
+          // No need to setDrawError(false) here as it's done at the start of the effect
+        }
+      });
+    } catch (e) {
+      console.error('[SmilesStructure] Error instantiating Drawer or calling draw:', smiles, e);
+      setDrawError(true);
     }
-  // This effect depends on the readiness flag, the actual SMILES string to draw, and drawer dimensions.
-  }, [isReadyToDraw, currentSmiles, width, height]);
 
-  // The old drawing logic from the single useLayoutEffect is now split into the two effects above.
+  }, [smiles, width, height, uniqueId]); // uniqueId is stable but good for completeness if component instance was reused
 
-  return <svg id={uniqueId} ref={svgRef} style={{ width: width, height: height }} aria-label={`Molecular structure for ${smiles}`} />;
+  return (
+    <svg 
+      id={uniqueId} 
+      ref={svgRef} 
+      style={{ width: width, height: height, border: drawError ? '1px solid red' : undefined }}
+      aria-label={`Molecular structure for ${smiles}`}
+    >
+      {drawError && (
+        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="#dc2626" fontSize="12px" fontFamily="sans-serif">
+          Error
+        </text>
+      )}
+    </svg>
+  );
 };
 
 export default SmilesStructure;
