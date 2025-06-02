@@ -70,8 +70,8 @@ def get_predictor() -> BBBPredictor:
 async def process_batch_job(
     job_id: str,
     # job_name is used for logging within process_batch_job, but the filename for batch_predictions comes from original_filename
-    job_name: str, # This is the sanitized job_name from batch_predict_csv
-    original_filename: str, # This is the sanitized original_filename from batch_predict_csv
+    job_name: str,  # This is the sanitized job_name from batch_predict_csv
+    original_filename: str,  # This is the sanitized original_filename from batch_predict_csv
     smiles_data: List[Dict[str, Any]],
     predictor: BBBPredictor,
     db: Any,
@@ -751,14 +751,20 @@ async def batch_predict_csv(
     # Sanitize job_name
     try:
         # Normalize, encode to ASCII ignoring errors, decode back, replace spaces, limit length
-        normalized_job_name = unicodedata.normalize('NFKD', raw_job_name).encode('ascii', 'ignore').decode('ascii')
-        job_name = re.sub(r'[^a-zA-Z0-9_\-. ]', '', normalized_job_name).strip()
-        job_name = re.sub(r'\s+', '_', job_name) # Replace spaces with underscores
-        job_name = job_name[:200] # Limit length
-        if not job_name: # Handle case where sanitization results in empty string
+        normalized_job_name = (
+            unicodedata.normalize("NFKD", raw_job_name)
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        job_name = re.sub(r"[^a-zA-Z0-9_\-. ]", "", normalized_job_name).strip()
+        job_name = re.sub(r"\s+", "_", job_name)  # Replace spaces with underscores
+        job_name = job_name[:200]  # Limit length
+        if not job_name:  # Handle case where sanitization results in empty string
             job_name = f"Batch_Job_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
     except Exception as e_sanitize_job_name:
-        logger.warning(f"Could not sanitize job_name '{raw_job_name}', using default. Error: {e_sanitize_job_name}")
+        logger.warning(
+            f"Could not sanitize job_name '{raw_job_name}', using default. Error: {e_sanitize_job_name}"
+        )
         job_name = f"Batch_Job_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
     logger.info(
@@ -907,7 +913,11 @@ async def batch_predict_csv(
             "updated_at": datetime.utcnow().isoformat(),
             "estimated_completion_time": estimated_completion.isoformat(),
             # Sanitize original_filename before storing
-            "original_filename": unicodedata.normalize('NFKD', file.filename if file.filename else "unknown_file.csv").encode('ascii', 'ignore').decode('ascii')[:255],
+            "original_filename": unicodedata.normalize(
+                "NFKD", file.filename if file.filename else "unknown_file.csv"
+            )
+            .encode("ascii", "ignore")
+            .decode("ascii")[:255],
         }
 
         insert_response = db.table("batch_jobs").insert(job_data).execute()
