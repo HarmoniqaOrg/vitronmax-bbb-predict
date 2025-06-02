@@ -125,6 +125,9 @@ class BBBPredictor:
             "brenk_alerts": 0,
             "heavy_atoms": None,
             "mol_formula": None,
+            "exact_mw": None,  # New
+            "formal_charge": None,  # New
+            "num_rings": None,  # New
         }
 
         if mol is None:
@@ -141,6 +144,9 @@ class BBBPredictor:
             props["heavy_atoms"] = mol.GetNumHeavyAtoms()
             props["frac_csp3"] = Descriptors.FractionCSP3(mol)
             props["molar_refractivity"] = Crippen.MolMR(mol)
+            props["exact_mw"] = Descriptors.ExactMolWt(mol)
+            props["formal_charge"] = Chem.rdmolops.GetFormalCharge(mol)
+            props["num_rings"] = Lipinski.RingCount(mol)
 
             # ESOL LogS
             # Formula: 0.16 - 0.63*logp - 0.0062*mw + 0.066*rot - 0.74*fr_csp3

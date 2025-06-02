@@ -8,7 +8,15 @@ interface PredictionResultProps {
 
 const PredictionResult = ({ result }: PredictionResultProps) => {
   const probabilityPercent = (result.bbb_probability * 100).toFixed(1);
-  const confidencePercent = (result.confidence_score * 100).toFixed(1);
+  const displayConfidence = 
+    typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
+      ? (result.confidence_score * 100).toFixed(1) + '%'
+      : 'N/A';
+
+  const progressConfidenceValue =
+    typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
+      ? result.confidence_score * 100
+      : 0;
   
   const getPredictionClass = () => {
     if (result.bbb_probability >= 0.7) return 'prediction-high';
@@ -48,9 +56,9 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
       <div className="space-y-2">
         <div className="flex justify-between items-center">
           <span className="text-sm">Confidence Score</span>
-          <span className="font-medium">{confidencePercent}%</span>
+          <span className="font-medium">{displayConfidence}</span>
         </div>
-        <Progress value={parseFloat(confidencePercent)} className="h-1.5" />
+        <Progress value={progressConfidenceValue} className="h-1.5" />
       </div>
       
       <div className="grid grid-cols-2 gap-4 text-sm">
@@ -73,7 +81,15 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <div>
             <p className="text-muted-foreground">Molecular Weight</p>
-            <p>{result.molecular_weight?.toFixed(2) ?? 'N/A'}</p>
+            <p>{result.mw?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Exact MW</p>
+            <p>{result.exact_mw?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Molecular Formula</p>
+            <p>{result.mol_formula ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">LogP</p>
@@ -85,31 +101,47 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
           </div>
           <div>
             <p className="text-muted-foreground">H-Bond Donors</p>
-            <p>{result.h_bond_donors ?? 'N/A'}</p>
+            <p>{result.h_donors ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">H-Bond Acceptors</p>
-            <p>{result.h_bond_acceptors ?? 'N/A'}</p>
+            <p>{result.h_acceptors ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Rotatable Bonds</p>
-            <p>{result.rotatable_bonds ?? 'N/A'}</p>
+            <p>{result.rot_bonds ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Formal Charge</p>
             <p>{result.formal_charge ?? 'N/A'}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Refractivity</p>
-            <p>{result.refractivity?.toFixed(2) ?? 'N/A'}</p>
+            <p className="text-muted-foreground">Molar Refractivity</p>
+            <p>{result.molar_refractivity?.toFixed(2) ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Number of Rings</p>
             <p>{result.num_rings ?? 'N/A'}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Exact MW</p>
-            <p>{result.exact_mw?.toFixed(2) ?? 'N/A'}</p>
+            <p className="text-muted-foreground">Fraction CSP3</p>
+            <p>{result.frac_csp3?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Heavy Atoms</p>
+            <p>{result.heavy_atoms ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">ESOL LogS (Solubility)</p>
+            <p>{result.log_s_esol?.toFixed(2) ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">GI Absorption</p>
+            <p>{result.gi_absorption ?? 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Lipinski's Rule</p>
+            <p>{typeof result.lipinski_passes === 'boolean' ? (result.lipinski_passes ? 'Passes' : 'Fails') : 'N/A'}</p>
           </div>
         </div>
       </div>

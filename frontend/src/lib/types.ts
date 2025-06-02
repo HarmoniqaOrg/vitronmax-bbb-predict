@@ -4,27 +4,34 @@
 
 export interface MoleculeResult {
   smiles: string;
-  molecule_name?: string;
+  molecule_name?: string | null;
   bbb_probability: number;
   prediction_class: string;
   confidence_score: number;
   processing_time_ms: number;
-  fingerprint_features?: number[];
-  molecular_weight: number;
-  logp: number;
-  tpsa: number;
-  h_bond_donors: number;
-  h_bond_acceptors: number;
-  rotatable_bonds: number;
-  pains_alerts: number;
-  brenk_alerts: number;
-  formal_charge: number;
-  refractivity: number;
-  num_rings: number;
-  exact_mw: number;
-  num_radical_electrons: number;
-  num_valence_electrons: number;
-  error?: string; // Added optional error field for individual molecule processing errors
+  fingerprint_features?: number[] | null;
+
+  // Detailed molecular properties from backend (snake_case, optional)
+  mw?: number | null;
+  logp?: number | null;
+  tpsa?: number | null;
+  rot_bonds?: number | null; // Renamed from rotatable_bonds
+  h_acceptors?: number | null; // Renamed from h_bond_acceptors
+  h_donors?: number | null; // Renamed from h_bond_donors
+  frac_csp3?: number | null; // New
+  molar_refractivity?: number | null; // Renamed from refractivity
+  log_s_esol?: number | null; // New
+  gi_absorption?: string | null; // New
+  lipinski_passes?: boolean | null; // New
+  pains_alerts?: number | null;
+  brenk_alerts?: number | null;
+  heavy_atoms?: number | null; // New
+  mol_formula?: string | null; // New
+  exact_mw?: number | null;
+  formal_charge?: number | null;
+  num_rings?: number | null;
+
+  error?: string | null; // Existing optional error field
 }
 
 export interface BatchJob {

@@ -50,6 +50,34 @@ class PredictionResponse(BaseModel):
     fingerprint_features: Optional[List[int]] = None
     processing_time_ms: float
 
+    # Detailed molecular properties
+    mw: Optional[float] = Field(None, description="Molecular Weight")
+    logp: Optional[float] = Field(
+        None, description="LogP (octanol-water partition coefficient)"
+    )
+    tpsa: Optional[float] = Field(None, description="Topological Polar Surface Area")
+    rot_bonds: Optional[int] = Field(None, description="Number of Rotatable Bonds")
+    h_acceptors: Optional[int] = Field(None, description="Number of H-bond Acceptors")
+    h_donors: Optional[int] = Field(None, description="Number of H-bond Donors")
+    frac_csp3: Optional[float] = Field(
+        None, description="Fraction of sp3 hybridized carbons"
+    )
+    molar_refractivity: Optional[float] = Field(None, description="Molar Refractivity")
+    log_s_esol: Optional[float] = Field(
+        None, description="ESOL LogS (aqueous solubility)"
+    )
+    gi_absorption: Optional[str] = Field(None, description="GI Absorption (High/Low)")
+    lipinski_passes: Optional[bool] = Field(
+        None, description="Passes Lipinski's Rule of Five"
+    )
+    pains_alerts: Optional[int] = Field(None, description="Number of PAINS alerts")
+    brenk_alerts: Optional[int] = Field(None, description="Number of Brenk alerts")
+    heavy_atoms: Optional[int] = Field(None, description="Number of Heavy Atoms")
+    mol_formula: Optional[str] = Field(None, description="Molecular Formula")
+    exact_mw: Optional[float] = Field(None, description="Exact Molecular Weight")
+    formal_charge: Optional[int] = Field(None, description="Formal Charge")
+    num_rings: Optional[int] = Field(None, description="Number of Rings")
+
 
 class BatchPredictionRequest(BaseModel):
     """Batch prediction job creation request."""
