@@ -27,6 +27,59 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _execute_batch_insert_items(
+    db: Any,
+    job_id: str,
+    items_batch: List[Dict[str, Any]],
+    logger_instance: logging.Logger,
+) -> bool:
+    """Helper function to batch insert items into batch_prediction_items."""
+    if not items_batch:
+        return True
+    try:
+        logger_instance.info(
+            f"Job {job_id}: Attempting to batch insert {len(items_batch)} items into batch_prediction_items."
+        )
+        # Supabase client's insert method accepts a list of dicts for bulk inserts.
+        # Run the synchronous db call in a separate thread to avoid blocking the event loop
+        response = await asyncio.to_thread(
+            db.table("batch_prediction_items").insert(items_batch).execute
+        )
+
+        # Check PostgREST response structure for success
+        # Assuming a successful insert returns data (list of inserted rows)
+        if (
+            hasattr(response, "data")
+            and response.data
+            and isinstance(response.data, list)
+        ):
+            logger_instance.info(
+                f"Job {job_id}: Successfully batch inserted {len(response.data)} items."
+            )
+            return True
+        elif hasattr(response, "error") and response.error:
+            # Log detailed PostgREST error if available
+            err_code = getattr(response.error, "code", "N/A")
+            err_message = getattr(response.error, "message", "N/A")
+            err_details = getattr(response.error, "details", "N/A")
+            err_hint = getattr(response.error, "hint", "N/A")
+            logger_instance.error(
+                f"Job {job_id}: Batch insert failed. DB Error: Code {err_code}, Message: {err_message}, Details: {err_details}, Hint: {err_hint}"
+            )
+            return False
+        else:
+            logger_instance.error(
+                f"Job {job_id}: Batch insert failed with unexpected response structure. Response: {response}"
+            )
+            return False
+    except Exception as e_batch_insert:
+        logger_instance.error(
+            f"Job {job_id}: Exception during batch insert: {e_batch_insert}",
+            exc_info=True,
+        )
+        return False
+
+
 def _update_job_progress_in_db(
     db: Any, job_id: str, processed_count: int, failed_count: int, total_molecules: int
 ) -> None:
@@ -78,7 +131,9 @@ async def process_batch_job(
 ) -> None:
     """Background task to process batch prediction job."""
     total_molecules = len(smiles_data)
-    UPDATE_DB_INTERVAL = 10  # Update progress every N items
+    UPDATE_DB_INTERVAL = 50  # Update progress every N items (Increased from 10)
+    BATCH_INSERT_SIZE = 100  # Insert 100 records into batch_prediction_items at a time
+    items_for_db_batch: List[Dict[str, Any]] = []
     processed_count = 0  # Successfully predicted molecules
     failed_count = 0  # Molecules that failed prediction or had invalid input
 
@@ -196,78 +251,50 @@ async def process_batch_job(
                         db, job_id, processed_count, failed_count, total_molecules
                     )
 
-                # Insert error record for initially invalid SMILES into batch_prediction_items
-                try:
-                    item_to_insert_error = {
-                        "batch_id": job_id,
-                        "smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
-                        "row_number": len(
-                            final_results_for_csv
-                        ),  # or a more robust row counter if available
-                        "probability": None,
-                        "model_version": settings.MODEL_VERSION,  # Default model version
-                        "molecular_weight": None,
-                        "log_p": None,
-                        "tpsa": None,
-                        "num_rotatable_bonds": None,
-                        "num_h_acceptors": None,
-                        "num_h_donors": None,
-                        "fraction_csp3": None,
-                        "molar_refractivity": None,
-                        "log_s_esol": None,
-                        "gi_absorption": None,
-                        "lipinski_rule_of_five_passes": None,
-                        "pains_alert_count": None,
-                        "brenk_alert_count": None,
-                        "num_heavy_atoms": None,
-                        "molecular_formula": None,
-                        "error_message": error_res.get(
-                            "error", "Invalid or empty SMILES string provided in input."
-                        ),
-                    }
-                    # Retry logic for inserting error item
-                    max_retries = 3
-                    base_delay = 0.1  # seconds
-                    for attempt in range(max_retries):
-                        try:
-                            db.table("batch_prediction_items").insert(
-                                item_to_insert_error
-                            ).execute()
-                            break  # Success, exit retry loop
-                        except Exception as e_retry_insert_error:
-                            # Check if it's a PostgREST foreign key violation (code 23503)
-                            is_fk_violation = False
-                            if (
-                                hasattr(e_retry_insert_error, "code")
-                                and e_retry_insert_error.code == "23503"
-                            ):
-                                is_fk_violation = True
-                            elif hasattr(e_retry_insert_error, "json") and callable(
-                                e_retry_insert_error.json
-                            ):
-                                try:
-                                    error_json = e_retry_insert_error.json()
-                                    if (
-                                        isinstance(error_json, dict)
-                                        and error_json.get("code") == "23503"
-                                    ):
-                                        is_fk_violation = True
-                                except Exception:
-                                    pass  # Ignore parsing errors, not a PostgREST error we can handle here
+                # Add error record for initially invalid SMILES to batch
+                item_to_insert_error = {
+                    "batch_id": job_id,
+                    "smiles": s if isinstance(s, str) else "INVALID_INPUT_TYPE",
+                    "row_number": len(
+                        final_results_for_csv
+                    ),  # or a more robust row counter if available
+                    "probability": None,
+                    "model_version": settings.MODEL_VERSION,  # Default model version
+                    "molecular_weight": None,
+                    "log_p": None,
+                    "tpsa": None,
+                    "num_rotatable_bonds": None,
+                    "num_h_acceptors": None,
+                    "num_h_donors": None,
+                    "fraction_csp3": None,
+                    "molar_refractivity": None,
+                    "log_s_esol": None,
+                    "gi_absorption": None,
+                    "lipinski_rule_of_five_passes": None,
+                    "pains_alert_count": None,
+                    "brenk_alert_count": None,
+                    "num_heavy_atoms": None,
+                    "molecular_formula": None,  # Add this missing key
+                    "error_message": error_res.get(
+                        "error", "Invalid or empty SMILES string provided in input."
+                    ),
+                }
+                items_for_db_batch.append(item_to_insert_error)
 
-                            if is_fk_violation and attempt < max_retries - 1:
-                                delay = base_delay * (2**attempt)
-                                logger.warning(
-                                    f"Job {job_id}: FK violation inserting error item for '{s}', attempt {attempt + 1}/{max_retries}. Retrying in {delay:.2f}s... Error: {e_retry_insert_error}"
-                                )
-                                await asyncio.sleep(delay)
-                            else:
-                                # Final attempt failed or not a FK violation we can retry
-                                raise e_retry_insert_error  # Re-raise the original or last error
-                except Exception as e_insert_error_item:
-                    logger.error(
-                        f"Job {job_id}: Failed to insert error item for '{s}' into batch_prediction_items: {e_insert_error_item}"
+                if len(items_for_db_batch) >= BATCH_INSERT_SIZE:
+                    logger.info(
+                        f"Job {job_id}: Reached BATCH_INSERT_SIZE ({BATCH_INSERT_SIZE}) for initially invalid SMILES. Executing batch insert."
                     )
+                    batch_insert_success = await _execute_batch_insert_items(
+                        db, job_id, items_for_db_batch, logger
+                    )
+                    if batch_insert_success:
+                        items_for_db_batch.clear()
+                    else:
+                        logger.error(
+                            f"Job {job_id}: Batch insert failed for a chunk of initially invalid SMILES. Clearing batch to proceed. Some items may not be in DB."
+                        )
+                        items_for_db_batch.clear()  # Clear to avoid retrying same failed batch
 
         logger.info(
             f"Job {job_id}: Found {len(smiles_for_predictor_call)} valid SMILES to process, {failed_count} initially invalid items."
@@ -349,81 +376,27 @@ async def process_batch_job(
                         k: v for k, v in item_to_insert.items() if v is not None
                     }
 
-                    # Outer try for the entire insertion process of a single item, including retries
-                    try:
-                        # Retry logic for inserting processed item
-                        max_retries = 3
-                        base_delay = 0.1  # seconds
-                        for attempt in range(max_retries):
-                            try:  # Inner try for a single attempt
-                                db.table("batch_prediction_items").insert(
-                                    item_to_insert_cleaned
-                                ).execute()
-                                break  # Success, exit retry loop
-                            except (
-                                Exception
-                            ) as e_retry_insert_item:  # Inner except for a single attempt
-                                is_fk_violation = False
-                                # Check for PostgREST/Supabase specific FK violation (code '23503')
-                                if (
-                                    hasattr(e_retry_insert_item, "code")
-                                    and e_retry_insert_item.code == "23503"
-                                ):
-                                    is_fk_violation = True
-                                elif hasattr(e_retry_insert_item, "json") and callable(
-                                    e_retry_insert_item.json
-                                ):
-                                    try:
-                                        error_json = e_retry_insert_item.json()
-                                        if (
-                                            isinstance(error_json, dict)
-                                            and error_json.get("code") == "23503"
-                                        ):
-                                            is_fk_violation = True
-                                    except Exception:
-                                        pass  # Ignore parsing errors if .json() fails or structure is unexpected
+                    # Add the cleaned prediction result (or error placeholder) to the batch
+                    items_for_db_batch.append(item_to_insert_cleaned)
 
-                                if is_fk_violation and attempt < max_retries - 1:
-                                    delay = base_delay * (2**attempt)
-                                    logger.warning(
-                                        f"Job {job_id}: FK violation inserting item for '{res_dict.get('input_smiles')}', attempt {attempt + 1}/{max_retries}. Retrying in {delay:.2f}s... Error: {e_retry_insert_item}"
-                                    )
-                                    await asyncio.sleep(delay)
-                                else:
-                                    # Final attempt failed or not a FK violation we can retry
-                                    logger.error(
-                                        f"Job {job_id}: Failed to insert item for '{res_dict.get('input_smiles')}' into batch_prediction_items after {attempt + 1} attempts. Error: {e_retry_insert_item}"
-                                    )
-                                    # Re-raise the exception to be caught by the outer try-except block
-                                    raise e_retry_insert_item
-                    # This except block is for the outer try that wraps the retry loop
-                    except Exception as e_insert_item:
-                        logger.error(
-                            f"Job {job_id}: Failed to insert item for '{res_dict.get('input_smiles')}' into batch_prediction_items: {e_insert_item}"
-                        )
             else:
                 # This is an unexpected internal error if counts don't match
                 logger.error(
                     f"Job {job_id}: Mismatch in result count from predictor. Expected {len(valid_input_items)}, Got {len(results_from_batch_predict)}. Marking remaining as failed."
                 )
-                # Account for the discrepancy in failed_count for accurate job summary
-                # This part might need more robust handling depending on how critical the mismatch is.
-                # For now, we assume the job will be marked as failed later if storage fails or if this error is severe.
-                # Add placeholder errors for items that didn't get a result
                 num_missing_results = len(valid_input_items) - len(
                     results_from_batch_predict
                 )
-                failed_count += num_missing_results  # Add to overall failed count
+                failed_count += num_missing_results
                 for i in range(len(results_from_batch_predict), len(valid_input_items)):
                     missing_item_data = valid_input_items[i]
-                    error_res = {
+                    error_res_missing = {
                         "smiles": missing_item_data.get(
                             "smiles", "UNKNOWN_SMILES_ERROR"
                         ),
                         "molecule_name": missing_item_data.get("molecule_name", ""),
                         "status": "error_missing_predictor_result",
                         "error": "Predictor did not return a result for this item.",
-                        # Populate other fields with None or default error values
                         "bbb_probability": None,
                         "bbb_class": None,
                         "bbb_confidence": None,
@@ -441,125 +414,102 @@ async def process_batch_job(
                         "pains_alerts": None,
                         "brenk_alerts": None,
                     }
-                    final_results_for_csv.append(error_res)
+                    final_results_for_csv.append(error_res_missing)
+                    item_to_insert_missing_error = {
+                        "batch_id": job_id,
+                        "smiles": error_res_missing["smiles"],
+                        "row_number": len(final_results_for_csv),
+                        "probability": None,
+                        "model_version": settings.MODEL_VERSION,
+                        "error_message": error_res_missing["error"],
+                        # Add other relevant None fields for consistency if schema expects them
+                        "molecular_weight": None,
+                        "log_p": None,
+                        "tpsa": None,
+                        "num_rotatable_bonds": None,
+                        "num_h_acceptors": None,
+                        "num_h_donors": None,
+                        "fraction_csp3": None,
+                        "molar_refractivity": None,
+                        "log_s_esol": None,
+                        "gi_absorption": None,
+                        "lipinski_rule_of_five_passes": None,
+                        "pains_alert_count": None,
+                        "brenk_alert_count": None,
+                        "num_heavy_atoms": None,
+                        "molecular_formula": None,
+                    }
+                    items_for_db_batch.append(item_to_insert_missing_error)
 
-                    # Insert error record for missing predictor result into batch_prediction_items
-                    try:
-                        item_to_insert_missing = {
-                            "batch_id": job_id,
-                            "smiles": missing_item_data.get(
-                                "smiles", "UNKNOWN_SMILES_ERROR"
-                            ),
-                            "row_number": len(results_from_batch_predict)
-                            + (i - len(results_from_batch_predict))
-                            + 1,  # Adjust row numbering
-                            "probability": None,
-                            "model_version": settings.MODEL_VERSION,
-                            "molecular_weight": None,
-                            "log_p": None,
-                            "tpsa": None,
-                            "num_rotatable_bonds": None,
-                            "num_h_acceptors": None,
-                            "num_h_donors": None,
-                            "fraction_csp3": None,
-                            "molar_refractivity": None,
-                            "log_s_esol": None,
-                            "gi_absorption": None,
-                            "lipinski_rule_of_five_passes": None,
-                            "pains_alert_count": None,
-                            "brenk_alert_count": None,
-                            "num_heavy_atoms": None,
-                            "molecular_formula": None,
-                            "error_message": error_res.get(
-                                "error",
-                                "Predictor did not return a result for this item.",
-                            ),
-                        }
+            # Periodic progress update for batch_jobs table AND batch insert for batch_prediction_items
+            # This block will now be triggered by UPDATE_DB_INTERVAL for batch_jobs update,
+            # OR when items_for_db_batch is full, OR at the very end of processing all molecules.
+            trigger_db_ops = False
+            if (processed_count + failed_count) == total_molecules:
+                trigger_db_ops = True  # End of all molecules
+            elif (processed_count + failed_count) > 0 and (
+                (processed_count + failed_count) % UPDATE_DB_INTERVAL == 0
+            ):
+                trigger_db_ops = True  # DB update interval for batch_jobs
+            if len(items_for_db_batch) >= BATCH_INSERT_SIZE and items_for_db_batch:
+                trigger_db_ops = True  # Batch for batch_prediction_items is full
 
-                        # Retry logic for inserting missing item placeholder
-                        max_retries_missing = 3
-                        base_delay_missing = 0.1  # seconds
-                        for attempt_missing in range(max_retries_missing):
-                            try:
-                                db.table("batch_prediction_items").insert(
-                                    item_to_insert_missing
-                                ).execute()
-                                break  # Success from insert
-                            except Exception as e_retry_missing_item:
-                                is_fk_violation_missing = False
-                                if (
-                                    hasattr(e_retry_missing_item, "code")
-                                    and e_retry_missing_item.code == "23503"
-                                ):
-                                    is_fk_violation_missing = True
-                                elif hasattr(e_retry_missing_item, "json") and callable(
-                                    e_retry_missing_item.json
-                                ):
-                                    try:
-                                        error_json_missing = e_retry_missing_item.json()
-                                        if (
-                                            isinstance(error_json_missing, dict)
-                                            and error_json_missing.get("code")
-                                            == "23503"
-                                        ):
-                                            is_fk_violation_missing = True
-                                    except Exception:
-                                        pass  # Ignore parsing errors if .json() fails or structure is unexpected
+            if trigger_db_ops:
+                # Always update overall job progress if at interval or end
+                if (
+                    ((processed_count + failed_count) % UPDATE_DB_INTERVAL == 0)
+                    and (processed_count + failed_count) > 0
+                ) or ((processed_count + failed_count) == total_molecules):
+                    _update_job_progress_in_db(
+                        db, job_id, processed_count, failed_count, total_molecules
+                    )
 
-                                if (
-                                    is_fk_violation_missing
-                                    and attempt_missing < max_retries_missing - 1
-                                ):
-                                    delay_missing = base_delay_missing * (
-                                        2**attempt_missing
-                                    )
-                                    logger.warning(
-                                        f"Job {job_id}: FK violation inserting missing item placeholder for '{missing_item_data.get('smiles')}', attempt {attempt_missing + 1}/{max_retries_missing}. Retrying in {delay_missing:.2f}s... Error: {e_retry_missing_item}"
-                                    )
-                                    await asyncio.sleep(delay_missing)
-                                else:  # This 'else' means: (not FK violation) OR (is FK violation AND last attempt)
-                                    logger.error(
-                                        f"Job {job_id}: Failed to insert missing item placeholder for '{missing_item_data.get('smiles')}' after {attempt_missing + 1} attempts or due to non-retriable error: {e_retry_missing_item}"
-                                    )
-                                    break  # Break from retry loop, error logged. Do not re-raise.
-                    except (
-                        Exception
-                    ) as e_insert_missing_item_outer:  # Outer catch-all for this item's processing
+                # Execute batch insert if batch is full or it's the end of all processing and items exist
+                if (len(items_for_db_batch) >= BATCH_INSERT_SIZE) or (
+                    items_for_db_batch
+                    and (processed_count + failed_count == total_molecules)
+                ):
+                    logger.info(
+                        f"Job {job_id}: Triggering batch insert for {len(items_for_db_batch)} items. Processed+Failed: {processed_count + failed_count}, Total: {total_molecules}"
+                    )
+                    batch_insert_success = await _execute_batch_insert_items(
+                        db, job_id, items_for_db_batch, logger
+                    )
+                    if batch_insert_success:
+                        items_for_db_batch.clear()
+                    else:
                         logger.error(
-                            f"Job {job_id}: General failure processing missing item placeholder for '{missing_item_data.get('smiles')}': {e_insert_missing_item_outer}"
+                            f"Job {job_id}: Batch insert failed. Clearing batch to proceed. Some items may not be in DB."
                         )
+                        items_for_db_batch.clear()  # Clear to avoid retrying same failed batch
 
-        logger.info(
-            f"Job {job_id}: All items processed. Successfully predicted: {processed_count}. Total failed (input or prediction): {failed_count}."
+        # Final flush for any remaining items in the batch (after all loops)
+        if items_for_db_batch:
+            logger.info(
+                f"Job {job_id}: Main processing loops finished. Flushing any remaining {len(items_for_db_batch)} items."
+            )
+            batch_insert_success = await _execute_batch_insert_items(
+                db, job_id, items_for_db_batch, logger
+            )
+            if batch_insert_success:
+                items_for_db_batch.clear()
+            else:
+                logger.error(
+                    f"Job {job_id}: Final batch insert attempt (after main loop) failed. Some items may not be in DB."
+                )
+                # items_for_db_batch is cleared by _execute_batch_insert_items on failure or success already if it was attempted.
+
+        # Ensure final progress update reflects the true end state.
+        _update_job_progress_in_db(
+            db, job_id, processed_count, failed_count, total_molecules
         )
 
-        # Step 4: Update DB progress (once, after all processing)
-        try:
-            db.table("batch_jobs").update(
-                {
-                    "processed_molecules": processed_count,  # Number successfully predicted
-                    "failed_molecules": failed_count,  # Number failed or invalid input
-                    "progress_percentage": 100.0,
-                    "updated_at": datetime.utcnow().isoformat(),
-                }
-            ).eq("job_id", job_id).execute()
-            logger.info(f"Job {job_id}: Progress updated to 100%.")
-        except Exception as e_progress:
-            logger.error(
-                f"Failed to update job progress for job {job_id}: {e_progress}"
-            )
-
-        # Step 5: Store results to CSV and upload
+        # Step 4: Store final results CSV and update job status to COMPLETED
         results_df = pd.DataFrame(final_results_for_csv)
-        # Ensure 'input_smiles' is the first column if it exists, then 'molecule_name'
-        cols = list(results_df.columns)
-        preferred_order = ["input_smiles", "molecule_name"]
-        for col_name in reversed(preferred_order):
-            if col_name in cols:
-                cols.insert(0, cols.pop(cols.index(col_name)))
-        results_df = results_df.loc[:, cols]
-
-        csv_content = results_df.to_csv(index=False)
+        csv_buffer = io.StringIO()
+        results_df.to_csv(csv_buffer, index=False)
+        csv_content = csv_buffer.getvalue()
+        csv_buffer.close()
 
         results_file_storage_path: Optional[str] = f"batch_results_{job_id}.csv"
         storage_upload_successful = False  # Flag to track success
