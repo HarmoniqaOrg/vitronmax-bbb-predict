@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ interface BatchFormInputs {
 
 const BatchUploadForm = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
   
   const { register, handleSubmit, reset } = useForm<BatchFormInputs>(); 
@@ -45,8 +47,9 @@ const BatchUploadForm = () => {
       
       toast({
         title: 'Batch job submitted successfully!',
-        description: `Job ID: ${result.job_id}. Status: ${result.status}.`,
+        description: `Job ID: ${result.job_id}. Status: ${result.status}. Redirecting...`,
       });
+      navigate(`/batch/${result.job_id}`);
       reset(); // Reset form on success
     } catch (error) {
       console.error("Batch upload failed:", error);
