@@ -49,7 +49,7 @@ const BatchUploadForm = () => {
         title: 'Batch job submitted successfully!',
         description: `Job ID: ${result.job_id}. Status: ${result.status}. Redirecting...`,
       });
-      navigate(`/batch/${result.job_id}`);
+      navigate(`/batch/${result.job_id}/results`);
       reset(); // Reset form on success
     } catch (error) {
       console.error("Batch upload failed:", error);

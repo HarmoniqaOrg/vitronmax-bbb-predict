@@ -288,7 +288,7 @@ const BatchResults = () => {
               {job.status === 'processing' && (
                 <div className="mt-4">
                   <p className="text-sm mb-2">
-                    Progress: {job.processed_molecules} / {job.total_molecules} molecules
+                    Progress: {job.processed_molecules ?? 0} / {job.total_molecules ?? 0} molecules
                   </p>
                   <div className="w-full max-w-md mx-auto bg-gray-200 rounded-full h-2">
                     <div 

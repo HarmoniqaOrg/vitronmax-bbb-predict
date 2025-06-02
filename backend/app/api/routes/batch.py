@@ -27,6 +27,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _update_job_progress_in_db(
+    db: Any, job_id: str, processed_count: int, failed_count: int, total_molecules: int
+) -> None:
+    """Helper function to update job progress in the database."""
+    if total_molecules == 0:
+        current_progress_percentage = 0.0
+    else:
+        current_progress_percentage = (
+            (processed_count + failed_count) / total_molecules
+        ) * 100
+
+    update_payload = {
+        "processed_molecules": processed_count,
+        "failed_molecules": failed_count,
+        "progress_percentage": round(current_progress_percentage, 2),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        db.table("batch_jobs").update(update_payload).eq("job_id", job_id).execute()
+        logger.info(
+            f"Job {job_id}: Progress updated - Processed: {processed_count}, Failed: {failed_count}, "
+            f"Total Handled: {processed_count + failed_count}/{total_molecules}, "
+            f"Percentage: {current_progress_percentage:.2f}%"
+        )
+    except Exception as e_progress_update:
+        logger.error(
+            f"Job {job_id}: Failed to update progress in DB: {e_progress_update}",
+            exc_info=True,
+        )
+
+
 def get_predictor() -> BBBPredictor:
     """Dependency to get ML predictor instance."""
     from app.main import app
@@ -46,6 +77,7 @@ async def process_batch_job(
 ) -> None:
     """Background task to process batch prediction job."""
     total_molecules = len(smiles_data)
+    UPDATE_DB_INTERVAL = 10  # Update progress every N items
     processed_count = 0  # Successfully predicted molecules
     failed_count = 0  # Molecules that failed prediction or had invalid input
 
@@ -153,6 +185,15 @@ async def process_batch_job(
                 }
                 final_results_for_csv.append(error_res)
                 failed_count += 1
+                # Periodic progress update for initially invalid SMILES
+                if (
+                    (processed_count + failed_count) % UPDATE_DB_INTERVAL == 0
+                    and (processed_count + failed_count) > 0
+                    and (processed_count + failed_count) < total_molecules
+                ):
+                    _update_job_progress_in_db(
+                        db, job_id, processed_count, failed_count, total_molecules
+                    )
 
                 # Insert error record for initially invalid SMILES into batch_prediction_items
                 try:
@@ -261,6 +302,16 @@ async def process_batch_job(
                             res_dict["error"] = res_dict.get(
                                 "status", "prediction_error"
                             )
+
+                    # Periodic progress update after processing a prediction result
+                    if (
+                        (processed_count + failed_count) % UPDATE_DB_INTERVAL == 0
+                        and (processed_count + failed_count) > 0
+                        and (processed_count + failed_count) < total_molecules
+                    ):
+                        _update_job_progress_in_db(
+                            db, job_id, processed_count, failed_count, total_molecules
+                        )
 
                     # Prepare data for batch_prediction_items table
                     item_to_insert = {
