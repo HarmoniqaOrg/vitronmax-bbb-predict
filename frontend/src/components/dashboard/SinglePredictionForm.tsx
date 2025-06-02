@@ -79,7 +79,7 @@ const SinglePredictionForm = () => {
   }, [debouncedSmiles, toast]);
 
   const predictMolecule = async (data: SinglePredictionFormData): Promise<SinglePredictionResult> => {
-    const apiUrl = `${import.meta.env.VITE_API_URL}/predict_fp`;
+    const apiUrl = `${import.meta.env.VITE_API_URL}/predict`;
     // Ensure the response is cast or expected as SinglePredictionResult (which is MoleculeResult)
     const response = await axios.post<SinglePredictionResult>(apiUrl, data);
     return response.data;
