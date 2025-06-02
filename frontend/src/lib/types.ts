@@ -8,6 +8,7 @@ export interface MoleculeResult {
   bbb_probability: number;
   prediction_class: string;
   confidence_score: number;
+  applicability_score?: number | null;
   processing_time_ms: number;
   fingerprint_features?: number[] | null;
 

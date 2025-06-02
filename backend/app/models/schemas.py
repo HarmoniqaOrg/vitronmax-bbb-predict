@@ -46,7 +46,13 @@ class PredictionResponse(BaseModel):
     molecule_name: Optional[str]
     bbb_probability: float = Field(..., ge=0.0, le=1.0)
     prediction_class: str  # "permeable" or "non_permeable"
-    confidence_score: float = Field(..., ge=0.0, le=1.0)
+    prediction_certainty: float = Field(..., ge=0.0, le=1.0)
+    applicability_score: Optional[float] = Field(
+        None,
+        description="Tanimoto similarity to the most similar molecule in the training set",
+        ge=0.0,
+        le=1.0,
+    )
     fingerprint_features: Optional[List[int]] = None
     processing_time_ms: float
 

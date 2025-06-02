@@ -29,7 +29,8 @@ class SinglePredictionResponse(BaseModel):
     # BBB Prediction specific
     bbb_probability: Optional[float] = None
     bbb_class: Optional[str] = None
-    bbb_confidence: Optional[float] = None
+    prediction_certainty: Optional[float] = None
+    applicability_score: Optional[float] = None
 
     # Physicochemical properties
     mw: Optional[float] = Field(default=None, description="Molecular Weight (g/mol)")
@@ -75,6 +76,9 @@ class SinglePredictionResponse(BaseModel):
     # Audit and timing
     processing_time_ms: Optional[float] = None
     model_version: Optional[str] = None
+    fingerprint_hash: Optional[str] = Field(
+        default=None, description="SHA256 hash of the canonical SMILES"
+    )
 
 
 class BatchPredictionItem(BaseModel):

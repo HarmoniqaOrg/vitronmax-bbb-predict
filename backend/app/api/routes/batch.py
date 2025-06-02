@@ -277,6 +277,8 @@ async def process_batch_job(
                     "brenk_alert_count": None,
                     "num_heavy_atoms": None,
                     "molecular_formula": None,  # Add this missing key
+                    "prediction_certainty": None,
+                    "applicability_score": None,
                     "error_message": error_res.get(
                         "error", "Invalid or empty SMILES string provided in input."
                     ),
@@ -350,6 +352,8 @@ async def process_batch_job(
                         "row_number": i
                         + 1,  # Assuming 1-based for now, adjust if original row numbers are available
                         "probability": res_dict.get("bbb_probability"),
+                        "prediction_certainty": res_dict.get("prediction_certainty"),
+                        "applicability_score": res_dict.get("applicability_score"),
                         "model_version": res_dict.get(
                             "model_version", settings.MODEL_VERSION
                         ),

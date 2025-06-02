@@ -7,15 +7,28 @@ interface PredictionResultProps {
 }
 
 const PredictionResult = ({ result }: PredictionResultProps) => {
+  // Ensure result.prediction_certainty and result.applicability_score are handled gracefully if undefined/null
+
   const probabilityPercent = (result.bbb_probability * 100).toFixed(1);
-  const displayConfidence = 
+  
+  const displayPredictionCertainty = 
     typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
       ? (result.confidence_score * 100).toFixed(1) + '%'
       : 'N/A';
 
-  const progressConfidenceValue =
+  const progressPredictionCertaintyValue =
     typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
       ? result.confidence_score * 100
+      : 0;
+
+  const displayApplicabilityScore =
+    typeof result.applicability_score === 'number' && !isNaN(result.applicability_score)
+      ? (result.applicability_score * 100).toFixed(1) + '%'
+      : 'N/A';
+
+  const progressApplicabilityScoreValue =
+    typeof result.applicability_score === 'number' && !isNaN(result.applicability_score)
+      ? result.applicability_score * 100
       : 0;
   
   const getPredictionClass = () => {
@@ -51,14 +64,27 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
             <span>100%</span>
           </div>
         </div>
+        { (result.bbb_probability >= 0.2 && result.bbb_probability <= 0.6) &&
+          <p className="text-xs text-muted-foreground mt-1 italic">
+            Note: Model predictions for probabilities between 0.2 and 0.6 may be slightly overestimated.
+          </p>
+        }
       </div>
       
       <div className="space-y-2">
         <div className="flex justify-between items-center">
-          <span className="text-sm">Confidence Score</span>
-          <span className="font-medium">{displayConfidence}</span>
+          <span className="text-sm">Prediction Certainty</span>
+          <span className="font-medium">{displayPredictionCertainty}</span>
         </div>
-        <Progress value={progressConfidenceValue} className="h-1.5" />
+        <Progress value={progressPredictionCertaintyValue} className="h-1.5" />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex justify-between items-center">
+          <span className="text-sm">Applicability Score (Similarity to Training Data)</span>
+          <span className="font-medium">{displayApplicabilityScore}</span>
+        </div>
+        <Progress value={progressApplicabilityScoreValue} className="h-1.5" />
       </div>
       
       <div className="grid grid-cols-2 gap-4 text-sm">

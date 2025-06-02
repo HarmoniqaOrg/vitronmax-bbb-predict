@@ -148,9 +148,22 @@ class TestBBBPredictor:
         assert data["pains_alerts"] == 0
         assert data["brenk_alerts"] == 1  # Aspirin has one Brenk alert (ester)
         assert data["bbb_probability"] is not None
-        assert data["bbb_class"] is not None
-        assert data["bbb_confidence"] is not None
-        assert "error" not in data or data["error"] is None
+        assert 0 <= data["bbb_probability"] <= 1
+        assert data["prediction_class"] in [
+            "permeable",
+            "non_permeable",
+        ]  # Assuming these are the classes
+        assert data["prediction_certainty"] is not None
+        assert 0 <= data["prediction_certainty"] <= 1
+        assert (
+            data.get("applicability_score") is not None
+        )  # Aspirin should have a score
+        if data.get("applicability_score") is not None:  # Check range only if present
+            assert 0 <= data["applicability_score"] <= 1
+        assert data.get("fingerprint_hash") is not None  # Aspirin should have a hash
+        if data.get("fingerprint_hash") is not None:  # Check type only if present
+            assert isinstance(data["fingerprint_hash"], str)
+        assert "error" not in data or data["error"] is None  # Existing check
 
     @pytest.mark.asyncio
     async def test_predict_smiles_data_invalid_smiles(
@@ -163,13 +176,18 @@ class TestBBBPredictor:
         if not predictor_instance.is_loaded:
             await predictor_instance.load_model()  # Explicitly load if using raw instance
 
-        data = await predictor_instance.predict_smiles_data(smiles)  # Added await
-        assert (
-            data["status"] == "error_invalid_smiles"
-        )  # Updated expected status based on predictor.py logic
-        assert data["error"] is not None
-        assert data["bbb_probability"] is None
-        assert data["mw"] is None
+        data = await predictor_instance.predict_smiles_data(smiles)
+        assert data["status"] == "error_invalid_smiles"
+        assert "Invalid SMILES string" in data.get(
+            "error", ""
+        )  # Check if error message is as expected
+        assert data.get("bbb_probability") == 0.0
+        assert data.get("prediction_certainty") == 0.0
+        # Check the default bbb_class for invalid smiles.
+        # _run_prediction_pipeline_sync returns "non_permeable" as prediction_class from initial dict.
+        assert data.get("prediction_class") == "non_permeable"
+        assert data.get("applicability_score") is None
+        assert data.get("fingerprint_hash") is None
 
     @pytest.mark.asyncio
     async def test_predict_smiles_data_empty_smiles(

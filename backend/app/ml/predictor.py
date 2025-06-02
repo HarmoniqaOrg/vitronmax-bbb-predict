@@ -2,17 +2,19 @@
 BBB permeability prediction using Random Forest and Morgan fingerprints.
 """
 
+import hashlib
 import logging
 import joblib
 import numpy as np
+import pandas as pd  # Added pandas
 from numpy.typing import NDArray
 from typing import List, Tuple, Optional, Dict, Any
 from fastapi.concurrency import run_in_threadpool
 
 from pathlib import Path
 
-from rdkit import Chem, rdBase
-from rdkit.Chem import rdMolDescriptors
+from rdkit import Chem, rdBase, DataStructs  # Added DataStructs
+from rdkit.Chem import AllChem, rdMolDescriptors  # Added AllChem
 from rdkit.Chem import Descriptors, Crippen, FilterCatalog, Lipinski
 from sklearn.ensemble import RandomForestClassifier
 
@@ -32,6 +34,7 @@ class BBBPredictor:
         self.is_loaded: bool = False
         self.pains_catalog: Optional[FilterCatalog.FilterCatalog] = None
         self.brenk_catalog: Optional[FilterCatalog.FilterCatalog] = None
+        self._training_fps: List[Any] = []  # For Tanimoto applicability score
 
         try:
             # Initialize PAINS alerts catalog (RDKit built-in A, B, C)
@@ -60,6 +63,13 @@ class BBBPredictor:
             # Set catalogs to None to indicate failure but allow app to potentially continue
             self.pains_catalog = None
             self.brenk_catalog = None
+
+        # Load training fingerprints for applicability score
+        try:
+            self._load_training_fingerprints()
+        except Exception as e:
+            logger.error(f"Failed to load training fingerprints: {e}", exc_info=True)
+            # self._training_fps will remain empty, applicability score will be None
 
         # Load the pre-trained model
         try:
@@ -104,6 +114,53 @@ class BBBPredictor:
         )
         self.model.fit(X_dummy, y_dummy)
         self.is_loaded = True
+
+    def _load_training_fingerprints(self) -> None:
+        """Load Morgan fingerprints from the training dataset for applicability scoring."""
+        # Path to the training data CSV file
+        # Assumes predictor.py is in backend/app/ml/, and sample_data is at project root
+        training_data_path = (
+            Path(__file__)
+            .resolve()
+            .parent.parent.parent.parent  # Adjusted to point to project root
+            / "sample_data"
+            / "training_dataset.csv"
+        )
+
+        if not training_data_path.exists():
+            logger.warning(
+                f"Training dataset for applicability score not found at {training_data_path}. "
+                f"Applicability score will not be calculated."
+            )
+            return
+
+        try:
+            df_train = pd.read_csv(training_data_path)
+            if "smiles" not in df_train.columns:
+                logger.warning(
+                    f"'smiles' column not found in {training_data_path}. "
+                    f"Applicability score will not be calculated."
+                )
+                return
+
+            count = 0
+            for smiles_str in df_train["smiles"]:
+                mol = Chem.MolFromSmiles(smiles_str)
+                if mol:
+                    fp = AllChem.GetMorganFingerprintAsBitVect(
+                        mol, radius=2, nBits=settings.FP_NBITS
+                    )
+                    self._training_fps.append(fp)
+                    count += 1
+            logger.info(
+                f"Successfully loaded {count} fingerprints from {training_data_path} for applicability scoring."
+            )
+        except Exception as e:
+            logger.error(
+                f"Error loading training fingerprints from {training_data_path}: {e}",
+                exc_info=True,
+            )
+            self._training_fps = []  # Ensure it's empty on error
 
     def _calculate_molecular_properties(
         self, mol: Optional[Chem.Mol]
@@ -210,67 +267,175 @@ class BBBPredictor:
         return props
 
     def _run_prediction_pipeline_sync(self, smiles: str) -> Dict[str, Any]:
-        """Synchronous helper to run the core prediction pipeline for a single SMILES."""
-        result: Dict[str, Any] = {
+        # Initialize default molecular properties. These will be updated if 'mol' is valid.
+        current_molecular_properties: Dict[str, Any] = (
+            self._calculate_molecular_properties(None)
+        )
+
+        # Base structure for the result. Fields will be updated based on pipeline execution.
+        final_result_data: Dict[str, Any] = {
             "smiles": smiles,
-            "status": "error_processing",
-            "bbb_probability": None,
-            "bbb_class": "unknown",
-            "bbb_confidence": None,
-            **self._calculate_molecular_properties(None),  # Initial default properties
+            "molecule_name": None,  # Can be updated later if available
+            **current_molecular_properties,
+            "status": "error_processing",  # Default, will be updated
+            "error": None,
+            "bbb_probability": 0.0,
+            "prediction_class": "non_permeable",  # Default, updated on success or specific errors
+            "prediction_certainty": 0.0,
+            "applicability_score": None,
+            "fingerprint_hash": None,
+            "fingerprint_features": None,
         }
 
-        # Note: Empty SMILES check is done in the async wrapper
-        # logger.info(f"Processing SMILES (sync): {repr(smiles)}") # Logging can be done in async wrapper or here if preferred
         mol: Optional[Chem.Mol] = None
+
         try:
             mol = Chem.MolFromSmiles(smiles)
             if mol is None:
-                result["status"] = "error_invalid_smiles"
-                result["error"] = (
-                    "Invalid SMILES string provided. RDKit could not parse it."
+                final_result_data["status"] = "error_invalid_smiles"
+                final_result_data["error"] = "Invalid SMILES string."
+                logger.debug(
+                    f"Invalid SMILES (sync): {smiles}. RDKit Mol object is None."
                 )
-                # logger.warning(f"Invalid SMILES (sync): {smiles}. RDKit Mol object is None.")
-                return result
-        except Exception as e_parse:  # This catches parsing errors
-            result["status"] = "error_parsing_smiles"
-            result["error"] = f"Error parsing SMILES: {e_parse}"
-            # logger.error(f"Error parsing SMILES '{smiles}' (sync): {e_parse}", exc_info=True)
-            return result
+                # prediction_class remains "non_permeable" (default)
+                # Other prediction fields remain at their defaults.
+                # Molecular properties are already set to defaults for None mol.
+                if final_result_data.get("error") is None:  # Cleanup error key
+                    if "error" in final_result_data:
+                        del final_result_data["error"]
+                return final_result_data
 
-        # Calculate properties now that we have a valid Mol object
-        calculated_props = self._calculate_molecular_properties(mol)
-        result.update(calculated_props)
+            # Mol is valid, update properties and attempt fingerprint hash
+            current_molecular_properties = self._calculate_molecular_properties(mol)
+            final_result_data.update(current_molecular_properties)
 
-        try:
-            fp = self._prepare_fingerprint(mol)
-            if fp is None:
-                result["status"] = "error_fingerprint_generation"
-                result["error"] = "Failed to generate fingerprint for the molecule."
-                # logger.error(f"Fingerprint generation failed for SMILES (sync): {smiles}")
-                return result
+            try:
+                canonical_smiles = Chem.MolToSmiles(mol, canonical=True)
+                final_result_data["fingerprint_hash"] = hashlib.sha256(
+                    canonical_smiles.encode("utf-8")
+                ).hexdigest()
+            except Exception as e_hash:
+                logger.warning(
+                    f"Could not generate canonical SMILES or hash for {smiles}: {e_hash}"
+                )
+                # fingerprint_hash remains None (default)
 
-            # Predict probability
-            assert self.model is not None, "Model should be loaded if is_loaded is True"
-            probability = self.model.predict_proba(fp.reshape(1, -1))[0, 1]
-            prediction_class = "permeable" if probability >= 0.5 else "non_permeable"
-            confidence = abs(probability - 0.5) * 2
+            fp_numpy_array = self._prepare_fingerprint(mol)
+            if fp_numpy_array is None:
+                final_result_data["status"] = "error_fingerprint_generation"
+                final_result_data["error"] = (
+                    "Failed to generate fingerprint for the molecule."
+                )
+                logger.debug(
+                    f"Numpy fingerprint generation failed for SMILES (sync): {smiles}"
+                )
+                # prediction_class remains "non_permeable" (default)
+                if final_result_data.get("error") is None:  # Cleanup error key
+                    if "error" in final_result_data:
+                        del final_result_data["error"]
+                return final_result_data
 
-            result.update(
-                {
-                    "bbb_probability": probability,
-                    "bbb_class": prediction_class,
-                    "bbb_confidence": confidence,
-                    "status": "success",
-                }
+            # Prepare RDKit fingerprint for Tanimoto
+            fp_rdkit_obj: Optional[Any] = None
+            try:
+                # Ensure radius matches what was used for training fingerprints if applicable
+                # Using settings.FP_RADIUS which should be 2 as per previous context
+                fp_rdkit_obj = AllChem.GetMorganFingerprintAsBitVect(
+                    mol, radius=settings.FP_RADIUS, nBits=settings.FP_NBITS
+                )
+            except Exception as e_fp_rdkit:
+                logger.warning(
+                    f"Failed to generate RDKit fingerprint for Tanimoto for {smiles}: {e_fp_rdkit}"
+                )
+
+            if not self.model or not self.is_loaded:
+                final_result_data["status"] = "error_model_not_loaded"
+                final_result_data["error"] = "Prediction model is not available."
+                logger.error(
+                    "Model not loaded, cannot perform BBB prediction in sync pipeline."
+                )
+                # prediction_class remains "non_permeable" (default)
+                if final_result_data.get("error") is None:  # Cleanup error key
+                    if "error" in final_result_data:
+                        del final_result_data["error"]
+                return final_result_data
+
+            # Perform prediction
+            probability = self.model.predict_proba(fp_numpy_array.reshape(1, -1))[0, 1]
+            final_result_data["bbb_probability"] = float(probability)
+            final_result_data["prediction_class"] = (
+                "permeable" if probability >= 0.5 else "non_permeable"
+            )
+            final_result_data["prediction_certainty"] = abs(probability - 0.5) * 2
+            final_result_data["fingerprint_features"] = fp_numpy_array.tolist()
+
+            # Calculate applicability score
+            if (
+                self._training_fps and fp_rdkit_obj
+            ):  # Ensure training FPs and current mol FP are available
+                try:
+                    similarities = DataStructs.BulkTanimotoSimilarity(
+                        fp_rdkit_obj, self._training_fps
+                    )
+                    # Ensure similarities list is not empty before calling max()
+                    if similarities:
+                        final_result_data["applicability_score"] = round(
+                            max(similarities), 4
+                        )
+                    else:
+                        # Handle case where similarities might be empty (e.g., if _training_fps was empty)
+                        final_result_data["applicability_score"] = (
+                            0.0  # Or None, depending on desired behavior
+                        )
+                except Exception as e_tanimoto:
+                    logger.warning(
+                        f"Tanimoto similarity calculation failed for {smiles}: {e_tanimoto}"
+                    )
+                    # applicability_score remains its default (None)
+            elif not self._training_fps:
+                logger.debug(
+                    "Training fingerprints not loaded, cannot calculate applicability score."
+                )
+            elif (
+                not fp_rdkit_obj
+            ):  # fp_rdkit_obj could be None if its generation failed
+                logger.debug(
+                    f"RDKit fingerprint not generated for {smiles}, cannot calculate applicability score."
+                )
+
+            final_result_data["status"] = "success"
+            final_result_data["error"] = (
+                None  # Explicitly set error to None for success
             )
 
-        except Exception as e_predict:
-            result["status"] = "error_bbb_prediction"
-            result["error"] = f"Error during BBB prediction: {e_predict}"
-            # logger.error(f"Error during BBB prediction for {smiles} (sync): {e_predict}", exc_info=True)
-            return result
-        return result
+        except Exception as e_pipeline:
+            logger.error(
+                f"Critical error in prediction pipeline for '{smiles}': {e_pipeline}",
+                exc_info=True,
+            )
+            final_result_data["status"] = (
+                "error_pipeline_execution"  # More specific status
+            )
+            final_result_data["error"] = (
+                f"Internal error during prediction pipeline: {e_pipeline!s}"
+            )
+            # Reset prediction-specific fields for general pipeline errors
+            final_result_data["bbb_probability"] = 0.0
+            final_result_data["prediction_class"] = (
+                "unknown"  # Distinct class for pipeline errors
+            )
+            final_result_data["prediction_certainty"] = 0.0
+            final_result_data["applicability_score"] = None
+            # fingerprint_hash and molecular_properties might have been partially set or default.
+            # Molecular properties are based on 'mol' if it was successfully created, else defaults.
+            # This is handled by initial setup and update after mol creation.
+
+        # Final cleanup of the error key
+        if final_result_data.get("error") is None:
+            if "error" in final_result_data:  # Check key existence before del
+                del final_result_data["error"]
+
+        return final_result_data
 
     async def predict_smiles_data(self, smiles: str) -> Dict[str, Any]:
         """Process a single SMILES string for BBB prediction and molecular properties (non-blocking)."""
@@ -295,6 +460,18 @@ class BBBPredictor:
         try:
             # Offload the synchronous, CPU-bound work to a thread pool
             result = await run_in_threadpool(self._run_prediction_pipeline_sync, smiles)
+            # ADDED LOGGING HERE (Corrected Placement)
+            logger.info(
+                f"Pipeline result for SMILES '{smiles}' (from try block): {result}"
+            )
+            if "prediction_class" in result:
+                logger.info(
+                    f"  prediction_class in pipeline_result for '{smiles}': {result['prediction_class']}"
+                )
+            else:
+                logger.warning(
+                    f"  prediction_class MISSING in pipeline_result for SMILES: {smiles}"
+                )
         except Exception as e_threadpool:
             # This catches errors from within _run_prediction_pipeline_sync if they weren't handled
             # or errors during the threadpool execution itself.
@@ -315,7 +492,7 @@ class BBBPredictor:
 
     def _prepare_fingerprint(
         self, mol: Optional[Chem.Mol]
-    ) -> Optional[NDArray[np.bool_]]:
+    ) -> Optional[NDArray[np.int_]]:
         """Convert an RDKit Mol object to a Morgan fingerprint if the mol is valid."""
         if mol is None:
             return None
@@ -323,7 +500,7 @@ class BBBPredictor:
             fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(
                 mol, settings.FP_RADIUS, nBits=settings.FP_NBITS
             )
-            return np.array(fp, dtype=bool)
+            return np.array(fp, dtype=np.int_)
         except Exception as e:
             logger.error(f"Error generating fingerprint: {e}", exc_info=True)
             return None

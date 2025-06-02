@@ -11,20 +11,19 @@ describe('PredictionResult Component', () => {
     prediction_class: 'BBB+',
     confidence_score: 0.92,
     processing_time_ms: 120.5,
-    molecular_weight: 46.07,
+    mw: 46.07,
     logp: -0.31,
     tpsa: 20.23,
-    h_bond_donors: 1,
-    h_bond_acceptors: 1,
-    rotatable_bonds: 0,
+    h_donors: 1,
+    h_acceptors: 1,
+    rot_bonds: 0,
     pains_alerts: 0,
     brenk_alerts: 0,
     formal_charge: 0,
-    refractivity: 12.95,
+    molar_refractivity: 12.95,
     num_rings: 0,
     exact_mw: 46.04186,
-    num_radical_electrons: 0,
-    num_valence_electrons: 18,
+    applicability_score: 0.75, // Added for completeness
   };
 
   it('should render all properties correctly when provided', () => {
@@ -37,6 +36,7 @@ describe('PredictionResult Component', () => {
     expect(screen.getByText('92.0%')).toBeInTheDocument(); // confidence_score
     expect(screen.getByText('120.50 ms')).toBeInTheDocument(); // processing_time_ms
     expect(screen.getByText('CCO')).toBeInTheDocument(); // smiles
+    expect(screen.getByText('75.0%')).toBeInTheDocument(); // applicability_score
 
     // Check new physicochemical properties
     expect(screen.getByText('Molecular Weight')).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('PredictionResult Component', () => {
     );
     expect(formalChargeValue).toBeInTheDocument();
 
-    expect(screen.getByText('Refractivity')).toBeInTheDocument();
+    expect(screen.getByText('Molar Refractivity')).toBeInTheDocument();
     expect(screen.getByText('12.95')).toBeInTheDocument();
     expect(screen.getByText('Number of Rings')).toBeInTheDocument();
     const numRingsValue = screen.getByText((content, element) =>

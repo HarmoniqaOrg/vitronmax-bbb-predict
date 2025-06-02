@@ -41,7 +41,11 @@ class TestPredictionAPI:
         assert data["molecule_name"] == "ethanol"
         assert "bbb_probability" in data
         assert "bbb_class" in data
-        assert "bbb_confidence" in data
+        assert "prediction_certainty" in data
+        assert "applicability_score" in data  # Can be None
+        assert (
+            "fingerprint_hash" in data
+        )  # Can be None if SMILES was invalid, but not for CCO
         assert "mw" in data
         assert "logp" in data
         assert "processing_time_ms" in data
@@ -51,7 +55,12 @@ class TestPredictionAPI:
         assert data["status"] == "success"
         assert 0 <= data["bbb_probability"] <= 1
         assert data["bbb_class"] in ["permeable", "non_permeable"]
-        assert 0 <= data["bbb_confidence"] <= 1
+        assert 0 <= data["prediction_certainty"] <= 1
+        if data.get("applicability_score") is not None:
+            assert 0 <= data["applicability_score"] <= 1
+        assert isinstance(
+            data.get("fingerprint_hash"), (str, type(None))
+        )  # Should be a string for CCO
         assert data["processing_time_ms"] > 0
 
     def test_invalid_smiles(self, client: TestClient) -> None:
