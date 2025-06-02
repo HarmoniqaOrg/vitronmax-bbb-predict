@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Download, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Download, RefreshCw, Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import BatchResultsTable from '@/components/batch/BatchResultsTable';
 import apiClient from '@/lib/api';
@@ -12,12 +14,14 @@ const BatchResults = () => {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [job, setJob] = useState<BatchJob | null>(null);
   const [results, setResults] = useState<MoleculeResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [resultsLoading, setResultsLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // For initial page load
+  const [resultsLoading, setResultsLoading] = useState(false); // For CSV results loading
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false); // For polls or manual refresh
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(true); // Auto-refresh toggle state
 
   const parseCSVResults = useCallback((csvText: string): MoleculeResult[] => {
     const lines = csvText.trim().split('\n');
@@ -27,8 +31,8 @@ const BatchResults = () => {
     const resultsArr: MoleculeResult[] = [];
     
     const headerMap: { [key: string]: keyof MoleculeResult | string } = {
-      'input_smiles': 'smiles', // CSV header 'input_smiles' maps to 'smiles' property
-      'smiles': 'smiles',         // CSV header 'smiles' also maps to 'smiles' property
+      'input_smiles': 'smiles',
+      'smiles': 'smiles',
       'molecule_name': 'molecule_name',
       'bbb_probability': 'bbb_probability',
       'prediction_class': 'prediction_class',
@@ -64,11 +68,10 @@ const BatchResults = () => {
       const rowData: Partial<MoleculeResult> = {};
       
       headers.forEach((header, index) => {
-        const mappedKey = headerMap[header.toLowerCase()]; // Ensure header is lowercased for map lookup
+        const mappedKey = headerMap[header.toLowerCase()];
         if (mappedKey) {
           const valueStr = values[index] || '';
           switch (mappedKey) {
-            // Float properties
             case 'bbb_probability':
             case 'confidence_score':
             case 'molecular_weight':
@@ -78,7 +81,6 @@ const BatchResults = () => {
             case 'exact_mw':
               rowData[mappedKey] = parseFloat(valueStr) || 0;
               break;
-            // Integer properties
             case 'h_bond_donors':
             case 'h_bond_acceptors':
             case 'rotatable_bonds':
@@ -88,41 +90,27 @@ const BatchResults = () => {
             case 'num_rings':
             case 'num_radical_electrons':
             case 'num_valence_electrons':
-            // processing_time_ms is also an int, but typically not in batch CSVs, handled by default later
               rowData[mappedKey] = parseInt(valueStr, 10) || 0;
               break;
-            // String properties
             case 'smiles':
-            case 'molecule_name': // Will be string or undefined if column missing/empty
+            case 'molecule_name':
             case 'prediction_class':
-            case 'error': // Will be string or undefined
+            case 'error':
               rowData[mappedKey] = valueStr;
               break;
-            // case 'processing_time_ms': // If it could come from CSV and needs int parsing
-            //   rowData[mappedKey] = parseInt(valueStr, 10) || 0;
-            //   break;
-            // case 'fingerprint_features': // Example for a more complex type if it were in CSV
-            //   rowData[mappedKey] = valueStr ? valueStr.split(';').map(Number) : undefined;
-            //   break;
             default:
-              // This ensures that if MoleculeResult gains new types of properties,
-              // we are alerted here if they are added to headerMap but not handled.
-              // For now, all types in MoleculeResult that are in headerMap are covered.
-              // const _exhaustiveCheck: never = mappedKey;
-              // console.warn(`Unhandled key type in CSV parsing: ${String(mappedKey)}`);
               break;
           }
         }
       });
       
-      // Ensure all required fields for MoleculeResult are present, even if with default/empty values
       resultsArr.push({
         smiles: rowData.smiles || '',
-        molecule_name: rowData.molecule_name, // Retains undefined if not present or empty in CSV
+        molecule_name: rowData.molecule_name,
         bbb_probability: rowData.bbb_probability ?? 0,
         prediction_class: rowData.prediction_class || '',
         confidence_score: rowData.confidence_score ?? 0,
-        processing_time_ms: rowData.processing_time_ms ?? 0, // Defaults to 0 if not parsed from CSV
+        processing_time_ms: rowData.processing_time_ms ?? 0,
         molecular_weight: rowData.molecular_weight ?? 0,
         logp: rowData.logp || 0,
         tpsa: rowData.tpsa || 0,
@@ -143,15 +131,25 @@ const BatchResults = () => {
     return resultsArr;
   }, [toast]);
 
-  const loadJobStatus = useCallback(async () => {
+  const loadJobStatus = useCallback(async (options: { initialLoad?: boolean; isPoll?: boolean } = {}) => {
     if (!jobId) return;
+
+    if (options.initialLoad) setLoading(true);
+    else setIsBackgroundLoading(true);
     
     try {
       const data = await apiClient.getBatchStatus(jobId);
       setJob(data);
+      if (data.status === 'completed' || data.status === 'failed') {
+        setIsPolling(false); // Stop polling if job is in a final state
+      }
     } catch (err) {
       console.error('Error loading job status:', err);
       setError('Failed to load job details');
+      if (options.isPoll) setIsPolling(false); // Stop polling on error during a poll
+    } finally {
+      if (options.initialLoad) setLoading(false);
+      else setIsBackgroundLoading(false);
     }
   }, [jobId]);
 
@@ -182,21 +180,35 @@ const BatchResults = () => {
     }
   }, [jobId, parseCSVResults, toast]);
 
+  // Initial load of job status
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      await loadJobStatus();
-      setLoading(false);
-    };
-    
-    loadData();
+    if (jobId) {
+      loadJobStatus({ initialLoad: true });
+    }
   }, [jobId, loadJobStatus]);
 
+  // Load results when job completes
   useEffect(() => {
-    if (job && job.status === 'completed') {
+    if (job && job.status === 'completed' && results.length === 0) { // also check results.length to avoid re-fetch if already loaded
       loadResults();
     }
-  }, [job, loadResults]);
+  }, [job, loadResults, results.length]);
+
+  // Polling logic
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | undefined;
+    if (isPolling && job && (job.status === 'pending' || job.status === 'processing')) {
+      // setIsBackgroundLoading(true); // Handled by loadJobStatus now
+      intervalId = setInterval(() => {
+        loadJobStatus({ isPoll: true });
+      }, 5000);
+    } else if (job && (job.status === 'completed' || job.status === 'failed')) {
+      setIsPolling(false); // Ensure polling is off for final states
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [job, isPolling, loadJobStatus]);
 
   const handleDownloadOriginal = () => {
     if (!jobId) return;
@@ -205,13 +217,11 @@ const BatchResults = () => {
   };
 
   const handleRefresh = () => {
-    loadJobStatus();
-    if (job?.status === 'completed') {
-      loadResults();
-    }
+    loadJobStatus(); // This will set isBackgroundLoading
+    // Results are loaded via useEffect when job status becomes 'completed'
   };
 
-  if (loading) {
+  if (loading) { // Initial page load state
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
@@ -238,6 +248,8 @@ const BatchResults = () => {
     );
   }
 
+  const isJobActive = job.status === 'pending' || job.status === 'processing';
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -256,9 +268,22 @@ const BatchResults = () => {
             </p>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleRefresh}>
-              <RefreshCw className="mr-2 h-4 w-4" />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="auto-refresh-toggle"
+                checked={isPolling}
+                onCheckedChange={setIsPolling}
+                disabled={!isJobActive}
+              />
+              <Label htmlFor="auto-refresh-toggle">Auto-Refresh</Label>
+            </div>
+            <Button variant="outline" onClick={handleRefresh} disabled={isBackgroundLoading && isJobActive}>
+              {isBackgroundLoading && isJobActive ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
               Refresh
             </Button>
             {job.status === 'completed' && (
@@ -275,13 +300,16 @@ const BatchResults = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                {job.status === 'processing' 
-                  ? 'Job is still processing. Results will be available when complete.'
-                  : job.status === 'pending'
-                  ? 'Job is pending. Processing will begin shortly.'
-                  : 'Job failed or was cancelled.'
-                }
+              <p className="text-muted-foreground flex items-center justify-center">
+                {isBackgroundLoading && isJobActive && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <span>
+                  {job.status === 'processing' 
+                    ? `Job is processing. Last update: ${new Date(job.updated_at).toLocaleString()}`
+                    : job.status === 'pending'
+                    ? `Job is pending. Created: ${new Date(job.created_at).toLocaleString()}`
+                    : `Job status: ${job.status}.` // Fallback for other non-completed states like 'failed'
+                  }
+                </span>
               </p>
               {job.status === 'processing' && (
                 <div className="mt-4">
@@ -303,7 +331,7 @@ const BatchResults = () => {
         <BatchResultsTable 
           results={results}
           jobName={job.job_name}
-          isLoading={resultsLoading}
+          isLoading={resultsLoading} // This is for the results table itself after job is complete
         />
       )}
     </div>
