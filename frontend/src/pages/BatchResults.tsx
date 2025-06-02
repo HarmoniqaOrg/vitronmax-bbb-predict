@@ -21,7 +21,6 @@ const BatchResults = () => {
   const [resultsLoading, setResultsLoading] = useState(false); // For CSV results loading
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false); // For polls or manual refresh
   const [error, setError] = useState<string | null>(null);
-  const [isPolling, setIsPolling] = useState(true); // Auto-refresh toggle state
 
   const parseCSVResults = useCallback((csvText: string): MoleculeResult[] => {
     const lines = csvText.trim().split('\n');
@@ -139,14 +138,11 @@ const BatchResults = () => {
     
     try {
       const data = await apiClient.getBatchStatus(jobId);
+      console.log('Fetched job status in BatchResults:', JSON.stringify(data)); // Diagnostic log
       setJob(data);
-      if (data.status === 'completed' || data.status === 'failed') {
-        setIsPolling(false); // Stop polling if job is in a final state
-      }
     } catch (err) {
       console.error('Error loading job status:', err);
       setError('Failed to load job details');
-      if (options.isPoll) setIsPolling(false); // Stop polling on error during a poll
     } finally {
       if (options.initialLoad) setLoading(false);
       else setIsBackgroundLoading(false);
@@ -194,21 +190,18 @@ const BatchResults = () => {
     }
   }, [job, loadResults, results.length]);
 
-  // Polling logic
+  // Polling logic - always active if job is pending or processing
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
-    if (isPolling && job && (job.status === 'pending' || job.status === 'processing')) {
-      // setIsBackgroundLoading(true); // Handled by loadJobStatus now
+    if (job && (job.status === 'pending' || job.status === 'processing')) {
       intervalId = setInterval(() => {
         loadJobStatus({ isPoll: true });
       }, 5000);
-    } else if (job && (job.status === 'completed' || job.status === 'failed')) {
-      setIsPolling(false); // Ensure polling is off for final states
-    }
+    } 
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [job, isPolling, loadJobStatus]);
+  }, [job, loadJobStatus]);
 
   const handleDownloadOriginal = () => {
     if (!jobId) return;
@@ -216,10 +209,7 @@ const BatchResults = () => {
     window.open(downloadUrl, '_blank');
   };
 
-  const handleRefresh = () => {
-    loadJobStatus(); // This will set isBackgroundLoading
-    // Results are loaded via useEffect when job status becomes 'completed'
-  };
+  
 
   if (loading) { // Initial page load state
     return (
@@ -269,23 +259,7 @@ const BatchResults = () => {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="auto-refresh-toggle"
-                checked={isPolling}
-                onCheckedChange={setIsPolling}
-                disabled={!isJobActive}
-              />
-              <Label htmlFor="auto-refresh-toggle">Auto-Refresh</Label>
-            </div>
-            <Button variant="outline" onClick={handleRefresh} disabled={isBackgroundLoading && isJobActive}>
-              {isBackgroundLoading && isJobActive ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Refresh
-            </Button>
+            {/* Refresh and Auto-Refresh toggle removed for always-on auto-refresh */}
             {job.status === 'completed' && (
               <Button onClick={handleDownloadOriginal}>
                 <Download className="mr-2 h-4 w-4" />
