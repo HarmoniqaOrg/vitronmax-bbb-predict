@@ -131,7 +131,9 @@ async def process_batch_job(
 ) -> None:
     """Background task to process batch prediction job."""
     total_molecules = len(smiles_data)
-    UPDATE_DB_INTERVAL = 50  # Update progress every N items (Increased from 10)
+    UPDATE_DB_INTERVAL = (
+        250  # Update progress every N items (Increased from 50, previously 10)
+    )
     BATCH_INSERT_SIZE = 100  # Insert 100 records into batch_prediction_items at a time
     items_for_db_batch: List[Dict[str, Any]] = []
     processed_count = 0  # Successfully predicted molecules
