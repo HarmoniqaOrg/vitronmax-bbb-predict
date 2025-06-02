@@ -912,12 +912,6 @@ async def batch_predict_csv(
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
             "estimated_completion_time": estimated_completion.isoformat(),
-            # Sanitize original_filename before storing
-            "original_filename": unicodedata.normalize(
-                "NFKD", file.filename if file.filename else "unknown_file.csv"
-            )
-            .encode("ascii", "ignore")
-            .decode("ascii")[:255],
         }
 
         insert_response = db.table("batch_jobs").insert(job_data).execute()
@@ -1014,15 +1008,42 @@ async def batch_predict_csv(
         logger.info(
             f"Job {job_id}: About to add task. Length of smiles_data being passed: {len(smiles_data_list)}"
         )
+        # Sanitize original_filename for the background task
+        raw_original_filename = file.filename if file.filename else "unknown_file.csv"
+        try:
+            sanitized_original_filename = (
+                unicodedata.normalize("NFKD", raw_original_filename)
+                .encode("ascii", "ignore")
+                .decode("ascii")
+            )
+            sanitized_original_filename = re.sub(
+                r"[^a-zA-Z0-9_\-. ]", "", sanitized_original_filename
+            ).strip()
+            sanitized_original_filename = re.sub(
+                r"\s+", "_", sanitized_original_filename
+            )
+            sanitized_original_filename = sanitized_original_filename[:255]
+            if not sanitized_original_filename:
+                sanitized_original_filename = (
+                    f"file_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+                )
+        except Exception as e_sanitize_filename:
+            logger.warning(
+                f"Job {job_id}: Could not sanitize original_filename '{raw_original_filename}', using default. Error: {e_sanitize_filename}"
+            )
+            sanitized_original_filename = (
+                f"file_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
+
+        # Schedule background task
         background_tasks.add_task(
             process_batch_job,
             job_id,
-            job_name,  # For logging or if batch_jobs table uses it
-            file.filename
-            or f"unknown_file_{job_id}.csv",  # Pass original_filename, ensure str
+            job_name,  # This is the sanitized job_name
+            sanitized_original_filename,  # Pass SANITIZED original filename
             smiles_data_list,
             predictor,
-            db,  # Pass db client instance
+            db,
         )
 
         # Use the created_at from job_data for consistency in response
