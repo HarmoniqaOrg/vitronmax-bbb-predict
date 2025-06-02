@@ -1062,12 +1062,19 @@ async def get_batch_status(
 ) -> BatchStatusResponse:
     """Get status of a specific batch job."""
     try:
+        logger.info(f"Job {job_id}: get_batch_status called.")
+        query_start_time = datetime.utcnow()
         response = (
             db.table("batch_jobs")
             .select("*")
             .eq("job_id", job_id)
             .maybe_single()
             .execute()
+        )
+        query_end_time = datetime.utcnow()
+        query_duration = (query_end_time - query_start_time).total_seconds()
+        logger.info(
+            f"Job {job_id}: Database query for status took {query_duration:.4f} seconds."
         )
         job_data = response.data
 
