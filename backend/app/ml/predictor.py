@@ -3,17 +3,18 @@ BBB permeability prediction using Random Forest and Morgan fingerprints.
 """
 
 import logging
-import joblib
+import joblib  # type: ignore
 import numpy as np
 from numpy.typing import NDArray
 from typing import List, Tuple, Optional, Dict, Any
+from fastapi.concurrency import run_in_threadpool
 
 from pathlib import Path
 
-from rdkit import Chem, rdBase
-from rdkit.Chem import rdMolDescriptors
+from rdkit import Chem, rdBase  # type: ignore[import-untyped]
+from rdkit.Chem import rdMolDescriptors  # type: ignore[import-untyped]
 from rdkit.Chem import Descriptors, Crippen, FilterCatalog, Lipinski
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier  # type: ignore[import-untyped]
 
 from app.core.config import settings
 
@@ -202,30 +203,19 @@ class BBBPredictor:
 
         return props
 
-    async def predict_smiles_data(self, smiles: str) -> Dict[str, Any]:
-        """Process a single SMILES string for BBB prediction and molecular properties."""
-
-        if not self.is_loaded:
-            logger.error("Model not loaded, cannot perform BBB prediction.")
-            raise RuntimeError("Model not loaded")
-
+    def _run_prediction_pipeline_sync(self, smiles: str) -> Dict[str, Any]:
+        """Synchronous helper to run the core prediction pipeline for a single SMILES."""
         result: Dict[str, Any] = {
             "smiles": smiles,
             "status": "error_processing",
             "bbb_probability": None,
             "bbb_class": "unknown",
             "bbb_confidence": None,
-            **self._calculate_molecular_properties(None),
+            **self._calculate_molecular_properties(None),  # Initial default properties
         }
 
-        # Handle empty SMILES input first
-        if not smiles:
-            logger.warning("Input SMILES string is empty.")
-            result["status"] = "error_empty_smiles"
-            result["error"] = "Input SMILES string is empty."
-            return result
-
-        logger.info(f"Processing SMILES: {repr(smiles)}")
+        # Note: Empty SMILES check is done in the async wrapper
+        # logger.info(f"Processing SMILES (sync): {repr(smiles)}") # Logging can be done in async wrapper or here if preferred
         mol: Optional[Chem.Mol] = None
         try:
             mol = Chem.MolFromSmiles(smiles)
@@ -234,11 +224,12 @@ class BBBPredictor:
                 result["error"] = (
                     "Invalid SMILES string provided. RDKit could not parse it."
                 )
-                logger.warning(f"Invalid SMILES: {smiles}. RDKit Mol object is None.")
+                # logger.warning(f"Invalid SMILES (sync): {smiles}. RDKit Mol object is None.")
                 return result
         except Exception as e_parse:  # This catches parsing errors
             result["status"] = "error_parsing_smiles"
-            logger.error(f"Error parsing SMILES '{smiles}': {e_parse}", exc_info=True)
+            result["error"] = f"Error parsing SMILES: {e_parse}"
+            # logger.error(f"Error parsing SMILES '{smiles}' (sync): {e_parse}", exc_info=True)
             return result
 
         # Calculate properties now that we have a valid Mol object
@@ -250,7 +241,7 @@ class BBBPredictor:
             if fp is None:
                 result["status"] = "error_fingerprint_generation"
                 result["error"] = "Failed to generate fingerprint for the molecule."
-                logger.error(f"Fingerprint generation failed for SMILES: {smiles}")
+                # logger.error(f"Fingerprint generation failed for SMILES (sync): {smiles}")
                 return result
 
             # Predict probability
@@ -270,11 +261,50 @@ class BBBPredictor:
 
         except Exception as e_predict:
             result["status"] = "error_bbb_prediction"
-            logger.error(
-                f"Error during BBB prediction for {smiles}: {e_predict}", exc_info=True
-            )
+            result["error"] = f"Error during BBB prediction: {e_predict}"
+            # logger.error(f"Error during BBB prediction for {smiles} (sync): {e_predict}", exc_info=True)
             return result
+        return result
 
+    async def predict_smiles_data(self, smiles: str) -> Dict[str, Any]:
+        """Process a single SMILES string for BBB prediction and molecular properties (non-blocking)."""
+        if not self.is_loaded:
+            logger.error("Model not loaded, cannot perform BBB prediction.")
+            # This exception will propagate and be caught by the caller in process_batch_job
+            raise RuntimeError("Model not loaded")
+
+        if not smiles:
+            logger.warning("Input SMILES string is empty.")
+            return {
+                "smiles": smiles,
+                "status": "error_empty_smiles",
+                "error": "Input SMILES string is empty.",
+                "bbb_probability": None,
+                "bbb_class": "unknown",
+                "bbb_confidence": None,
+                **self._calculate_molecular_properties(None),  # Default properties
+            }
+
+        logger.info(f"Processing SMILES (async via threadpool): {repr(smiles)}")
+        try:
+            # Offload the synchronous, CPU-bound work to a thread pool
+            result = await run_in_threadpool(self._run_prediction_pipeline_sync, smiles)
+        except Exception as e_threadpool:
+            # This catches errors from within _run_prediction_pipeline_sync if they weren't handled
+            # or errors during the threadpool execution itself.
+            logger.error(
+                f"Error running prediction pipeline in threadpool for SMILES '{smiles}': {e_threadpool}",
+                exc_info=True,
+            )
+            return {
+                "smiles": smiles,
+                "status": "error_threadpool_execution",
+                "error": f"Critical error in prediction pipeline: {e_threadpool}",
+                "bbb_probability": None,
+                "bbb_class": "unknown",
+                "bbb_confidence": None,
+                **self._calculate_molecular_properties(None),  # Default properties
+            }
         return result
 
     def _prepare_fingerprint(

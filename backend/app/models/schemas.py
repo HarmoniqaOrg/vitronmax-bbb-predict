@@ -68,6 +68,7 @@ class BatchJobResponse(BaseModel):
     created_at: datetime
     estimated_completion_time: Optional[datetime]
     total_molecules: int
+    job_name: Optional[str] = None  # User-provided name for the job
     detail: Optional[str] = None  # Added for messages
 
 

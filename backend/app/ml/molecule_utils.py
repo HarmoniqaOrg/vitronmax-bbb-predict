@@ -1,6 +1,7 @@
 # backend/app/ml/molecule_utils.py
-from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit import Chem  # type: ignore
+from rdkit.Chem import AllChem  # type: ignore
+from typing import cast
 
 
 def smiles_to_pdb_string(smiles: str) -> str | None:
@@ -40,7 +41,7 @@ def smiles_to_pdb_string(smiles: str) -> str | None:
 
         # Generate PDB block
         pdb_block = Chem.MolToPDBBlock(mol_with_hs)
-        return pdb_block
+        return cast(str, pdb_block)
     except Exception as e:
         print(f"Error converting SMILES to PDB: {smiles}, Error: {str(e)}")
         return None

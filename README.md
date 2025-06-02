@@ -2,6 +2,10 @@
 
 A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) permeability prediction.
 
+## 📚 About
+
+VitronMax is an open-source machine learning platform for predicting blood-brain barrier (BBB) permeability of drug candidates with state-of-the-art accuracy (AUC-ROC: 0.932, AUC-PR: 0.959). Built on Random Forest with Morgan fingerprints and validated on 7,807 diverse compounds, it offers reliable predictions for CNS drug discovery pipelines. 
+
 ## 🚀 Features
 
 - **API-First Design**: RESTful API with comprehensive endpoints
@@ -10,12 +14,7 @@ A fast, explainable in-silico screening platform for Blood-Brain-Barrier (BBB) p
 - **AI Explanations**: GPT-powered molecular insights
 - **Modern Dashboard**: React/Next.js interface
 - **Production Ready**: Docker, CI/CD, monitoring
-
-## 📊 Performance Targets
-
-- External AUC-ROC ≥ 0.90
-- 95th-percentile latency < 800ms
-- 80%+ test coverage
+- **Extra Features**: Molecular property calculations, structural alerts, 3D visualization, and comprehensive scientific validation.
 
 ## 🧬 Model Validation
 
@@ -44,7 +43,7 @@ For complete documentation on the validation methodology, detailed performance m
 - Next.js 14 + TypeScript
 - Tailwind CSS + shadcn/ui
 - React Query for data fetching
-- Recharts for visualizations
+- Recharts, 3Dmol.js and RDKit for visualizations
 
 ### Infrastructure
 - Fly.io deployment
