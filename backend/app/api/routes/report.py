@@ -9,10 +9,10 @@ from fastapi.responses import StreamingResponse
 import io
 from typing import Dict, Any
 
-from reportlab.lib import colors  # type: ignore
-from reportlab.lib.pagesizes import A4  # type: ignore
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle  # type: ignore
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from app.models.schemas import PredictionRequest
 from app.ml.predictor import BBBPredictor

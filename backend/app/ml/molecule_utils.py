@@ -1,6 +1,6 @@
 # backend/app/ml/molecule_utils.py
-from rdkit import Chem  # type: ignore
-from rdkit.Chem import AllChem  # type: ignore
+from rdkit import Chem
+from rdkit.Chem import AllChem
 from typing import cast
 
 
