@@ -80,7 +80,9 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
   const [filterClass, setFilterClass] = useState<string>('all'); 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]); 
-  const [bbbProbabilityRange, setBbbProbabilityRange] = useState<[number, number]>([0, 1]); 
+  const [bbbProbabilityRange, setBbbProbabilityRange] = useState<[number, number]>([0, 1]);
+  const [confidenceRange, setConfidenceRange] = useState<[number, number]>([0, 1]); // Raw value 0-1
+  const [applicabilityScoreRange, setApplicabilityScoreRange] = useState<[number, number]>([0, 1]); 
 
   const parentRef = useRef<HTMLDivElement>(null);
   const ROW_ESTIMATE_SIZE = 75; 
@@ -131,6 +133,8 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
         return typeof val === 'number' ? (val * 100).toFixed(1) + '%' : 'N/A';
       },
       size: 120,
+      filterFn: 'inNumberRange',
+      enableColumnFilter: true,
     },
     {
       accessorKey: 'applicability_score',
@@ -140,6 +144,8 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
         return val?.toFixed(3) ?? 'N/A';
       },
       size: 120,
+      filterFn: 'inNumberRange',
+      enableColumnFilter: true,
     },
     {
       accessorKey: 'error',
@@ -367,6 +373,44 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                 onValueChange={(newRange) => {
                   setBbbProbabilityRange(newRange as [number, number]);
                   table.getColumn('bbb_probability')?.setFilterValue(newRange);
+                }}
+                className="w-full"
+              />
+            </div>
+
+            {/* Confidence Range Slider Filter */}
+            <div className="flex flex-col space-y-2 w-full md:w-auto md:min-w-[200px]">
+              <label htmlFor="confidenceSlider" className="text-sm font-medium text-muted-foreground">
+                Confidence: {(confidenceRange[0] * 100).toFixed(0)}% - {(confidenceRange[1] * 100).toFixed(0)}%
+              </label>
+              <Slider
+                id="confidenceSlider"
+                min={0}
+                max={1}
+                step={0.01}
+                value={confidenceRange}
+                onValueChange={(newRange) => {
+                  setConfidenceRange(newRange as [number, number]);
+                  table.getColumn('prediction_certainty')?.setFilterValue(newRange);
+                }}
+                className="w-full"
+              />
+            </div>
+
+            {/* Applicability Score Range Slider Filter */}
+            <div className="flex flex-col space-y-2 w-full md:w-auto md:min-w-[200px]">
+              <label htmlFor="applicabilitySlider" className="text-sm font-medium text-muted-foreground">
+                Applicability: {applicabilityScoreRange[0].toFixed(2)} - {applicabilityScoreRange[1].toFixed(2)}
+              </label>
+              <Slider
+                id="applicabilitySlider"
+                min={0}
+                max={1}
+                step={0.01}
+                value={applicabilityScoreRange}
+                onValueChange={(newRange) => {
+                  setApplicabilityScoreRange(newRange as [number, number]);
+                  table.getColumn('applicability_score')?.setFilterValue(newRange);
                 }}
                 className="w-full"
               />
