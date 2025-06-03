@@ -180,11 +180,11 @@ class BBBPredictor:
             "lipinski_passes": None,
             "pains_alerts": 0,
             "brenk_alerts": 0,
-            "heavy_atoms": None,
-            "mol_formula": None,
-            "exact_mw": None,  # New
-            "formal_charge": None,  # New
-            "num_rings": None,  # New
+            "num_heavy_atoms": None,  # Changed key
+            "molecular_formula": None,  # Changed key
+            "exact_mw": None,
+            "formal_charge": None,
+            "num_rings": None,
         }
 
         if mol is None:
@@ -197,8 +197,10 @@ class BBBPredictor:
             props["h_acceptors"] = Lipinski.NumHAcceptors(mol)
             props["h_donors"] = Lipinski.NumHDonors(mol)
             props["rot_bonds"] = Lipinski.NumRotatableBonds(mol)
-            props["mol_formula"] = rdMolDescriptors.CalcMolFormula(mol)
-            props["heavy_atoms"] = mol.GetNumHeavyAtoms()
+            props["molecular_formula"] = rdMolDescriptors.CalcMolFormula(
+                mol
+            )  # Changed key
+            props["num_heavy_atoms"] = mol.GetNumHeavyAtoms()  # Changed key
             props["frac_csp3"] = Descriptors.FractionCSP3(mol)
             props["molar_refractivity"] = Crippen.MolMR(mol)
             props["exact_mw"] = Descriptors.ExactMolWt(mol)

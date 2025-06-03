@@ -51,7 +51,7 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">{getPredictionLabel()}</span>
             <Badge variant="outline" className="ml-2">
-              {result.bbb_class}
+              {getPredictionLabel()} 
             </Badge>
           </div>
           <Progress 
