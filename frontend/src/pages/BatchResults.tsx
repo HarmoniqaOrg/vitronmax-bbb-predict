@@ -25,106 +25,139 @@ const BatchResults = () => {
   const parseCSVResults = useCallback((csvText: string): MoleculeResult[] => {
     const lines = csvText.trim().split('\n');
     if (lines.length <= 1) return [];
-    
+
     const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
     const resultsArr: MoleculeResult[] = [];
-    
-    const headerMap: { [key: string]: keyof MoleculeResult | string } = {
+
+    // Maps CSV headers (lowercase) to MoleculeResult field names
+    const headerMap: { [key: string]: keyof MoleculeResult } = {
       'input_smiles': 'smiles',
-      'smiles': 'smiles',
+      'smiles': 'smiles', 
       'molecule_name': 'molecule_name',
       'bbb_probability': 'bbb_probability',
-      'prediction_class': 'prediction_class',
-      'bbb_confidence': 'confidence_score',
-      'mw': 'molecular_weight',
+      'prediction_class': 'bbb_class', // CSV 'prediction_class' maps to 'bbb_class' in MoleculeResult
+      'bbb_confidence': 'prediction_certainty', // CSV 'bbb_confidence' maps to 'prediction_certainty'
+      'applicability_score': 'applicability_score',
+      'mw': 'mw',
       'logp': 'logp',
       'tpsa': 'tpsa',
-      'h_bond_donors': 'h_bond_donors',
-      'h_bond_acceptors': 'h_bond_acceptors',
-      'rotatable_bonds': 'rotatable_bonds',
+      'rot_bonds': 'rot_bonds', // CSV 'rotatable_bonds' might be used, map to 'rot_bonds'
+      'rotatable_bonds': 'rot_bonds',
+      'h_acceptors': 'h_acceptors', // CSV 'h_bond_acceptors' might be used
+      'h_bond_acceptors': 'h_acceptors',
+      'h_donors': 'h_donors', // CSV 'h_bond_donors' might be used
+      'h_bond_donors': 'h_donors',
+      'frac_csp3': 'frac_csp3',
+      'molar_refractivity': 'molar_refractivity', // CSV 'refractivity' might be used
+      'refractivity': 'molar_refractivity',
+      'log_s_esol': 'log_s_esol',
+      'gi_absorption': 'gi_absorption',
+      'lipinski_passes': 'lipinski_passes',
       'pains_alerts': 'pains_alerts',
       'brenk_alerts': 'brenk_alerts',
-      'formal_charge': 'formal_charge',
-      'refractivity': 'refractivity',
-      'num_rings': 'num_rings',
+      'num_heavy_atoms': 'num_heavy_atoms', // CSV 'heavy_atoms' might be used
+      'heavy_atoms': 'num_heavy_atoms',
+      'molecular_formula': 'molecular_formula', // CSV 'mol_formula' might be used
+      'mol_formula': 'molecular_formula',
       'exact_mw': 'exact_mw',
+      'formal_charge': 'formal_charge',
+      'num_rings': 'num_rings',
       'error': 'error',
     };
 
-    let actualSmilesHeader: string | undefined = headers.find(h => h === 'input_smiles');
-    if (!actualSmilesHeader) {
-      actualSmilesHeader = headers.find(h => h === 'smiles');
+    let smilesHeaderKey: keyof MoleculeResult | undefined;
+    if (headers.includes('input_smiles')) {
+        smilesHeaderKey = headerMap['input_smiles'];
+    } else if (headers.includes('smiles')) {
+        smilesHeaderKey = headerMap['smiles'];
     }
 
-    if (!actualSmilesHeader) {
-        console.error("CSV Parse Error: Neither 'input_smiles' nor 'smiles' header found.");
-        toast({ title: 'CSV Parsing Error', description: "Mandatory SMILES column (expected 'input_smiles' or 'smiles') not found in results.", variant: 'destructive' });
+    if (!smilesHeaderKey) {
+        console.error("CSV Parse Error: SMILES header ('input_smiles' or 'smiles') not found.");
+        toast({ title: 'CSV Parsing Error', description: "Mandatory SMILES column not found.", variant: 'destructive' });
         return [];
     }
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
       const rowData: Partial<MoleculeResult> = {};
-      
+
       headers.forEach((header, index) => {
-        const mappedKey = headerMap[header.toLowerCase()];
+        const mappedKey = headerMap[header.toLowerCase()]; 
         if (mappedKey) {
           const valueStr = values[index] || '';
+          const lowerValueStr = valueStr.toLowerCase();
+          const isNA = lowerValueStr === 'n/a' || lowerValueStr === 'nan' || lowerValueStr === '';
+
           switch (mappedKey) {
             case 'bbb_probability':
-            case 'confidence_score':
-            case 'molecular_weight':
+            case 'prediction_certainty':
+            case 'applicability_score':
+            case 'mw':
             case 'logp':
             case 'tpsa':
-            case 'refractivity':
+            case 'frac_csp3':
+            case 'molar_refractivity':
+            case 'log_s_esol':
             case 'exact_mw':
-              rowData[mappedKey] = parseFloat(valueStr) || 0;
+              rowData[mappedKey] = isNA ? null : parseFloat(valueStr);
               break;
-            case 'h_bond_donors':
-            case 'h_bond_acceptors':
-            case 'rotatable_bonds':
+            case 'rot_bonds':
+            case 'h_acceptors':
+            case 'h_donors':
             case 'pains_alerts':
             case 'brenk_alerts':
+            case 'num_heavy_atoms':
             case 'formal_charge':
             case 'num_rings':
-            case 'num_radical_electrons':
-            case 'num_valence_electrons':
-              rowData[mappedKey] = parseInt(valueStr, 10) || 0;
+              rowData[mappedKey] = isNA ? null : parseInt(valueStr, 10);
               break;
-            case 'smiles':
+            case 'lipinski_passes':
+              rowData[mappedKey] = isNA ? null : lowerValueStr === 'true';
+              break;
+            case 'smiles': 
             case 'molecule_name':
-            case 'prediction_class':
+            case 'bbb_class': 
+            case 'gi_absorption':
+            case 'molecular_formula': 
             case 'error':
-              rowData[mappedKey] = valueStr;
+              rowData[mappedKey] = isNA ? null : valueStr;
               break;
             default:
               break;
           }
         }
       });
-      
+
+      const smilesValue = rowData.smiles || ''; // Ensure smiles is always a string
+
       resultsArr.push({
-        smiles: rowData.smiles || '',
-        molecule_name: rowData.molecule_name,
-        bbb_probability: rowData.bbb_probability ?? 0,
-        prediction_class: rowData.prediction_class || '',
-        confidence_score: rowData.confidence_score ?? 0,
-        processing_time_ms: rowData.processing_time_ms ?? 0,
-        molecular_weight: rowData.molecular_weight ?? 0,
-        logp: rowData.logp || 0,
-        tpsa: rowData.tpsa || 0,
-        h_bond_donors: rowData.h_bond_donors || 0,
-        h_bond_acceptors: rowData.h_bond_acceptors || 0,
-        rotatable_bonds: rowData.rotatable_bonds || 0,
-        pains_alerts: rowData.pains_alerts || 0,
-        brenk_alerts: rowData.brenk_alerts || 0,
-        formal_charge: rowData.formal_charge || 0,
-        refractivity: rowData.refractivity || 0,
-        num_rings: rowData.num_rings || 0,
-        exact_mw: rowData.exact_mw || 0,
-        num_radical_electrons: rowData.num_radical_electrons || 0,
-        num_valence_electrons: rowData.num_valence_electrons || 0,
-        error: rowData.error,
+        smiles: smilesValue,
+        molecule_name: rowData.molecule_name ?? null,
+        bbb_probability: rowData.bbb_probability ?? 0, 
+        bbb_class: rowData.bbb_class ?? '', 
+        prediction_certainty: rowData.prediction_certainty ?? 0, 
+        applicability_score: rowData.applicability_score === undefined ? null : rowData.applicability_score,
+        processing_time_ms: 0, // Not available from CSV, default to 0
+        mw: rowData.mw ?? null,
+        logp: rowData.logp ?? null,
+        tpsa: rowData.tpsa ?? null,
+        rot_bonds: rowData.rot_bonds ?? null,
+        h_acceptors: rowData.h_acceptors ?? null,
+        h_donors: rowData.h_donors ?? null,
+        frac_csp3: rowData.frac_csp3 ?? null,
+        molar_refractivity: rowData.molar_refractivity ?? null,
+        log_s_esol: rowData.log_s_esol ?? null,
+        gi_absorption: rowData.gi_absorption ?? null,
+        lipinski_passes: rowData.lipinski_passes ?? null,
+        pains_alerts: rowData.pains_alerts ?? null,
+        brenk_alerts: rowData.brenk_alerts ?? null,
+        num_heavy_atoms: rowData.num_heavy_atoms ?? null,
+        molecular_formula: rowData.molecular_formula ?? null,
+        exact_mw: rowData.exact_mw ?? null,
+        formal_charge: rowData.formal_charge ?? null,
+        num_rings: rowData.num_rings ?? null,
+        error: rowData.error ?? null,
       });
     }
     return resultsArr;

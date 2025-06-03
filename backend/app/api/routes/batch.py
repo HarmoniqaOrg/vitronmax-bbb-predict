@@ -276,7 +276,11 @@ async def process_batch_job(
                     "pains_alert_count": None,
                     "brenk_alert_count": None,
                     "num_heavy_atoms": None,
-                    "molecular_formula": None,  # Add this missing key
+                    "molecular_formula": None,
+                    "exact_molecular_weight": None,
+                    "formal_charge": None,
+                    "num_rings": None,
+                    "prediction_class": None,
                     "prediction_certainty": None,
                     "applicability_score": None,
                     "error_message": error_res.get(
@@ -372,6 +376,10 @@ async def process_batch_job(
                         "brenk_alert_count": res_dict.get("brenk_alerts"),
                         "num_heavy_atoms": res_dict.get("heavy_atoms"),
                         "molecular_formula": res_dict.get("mol_formula"),
+                        "exact_molecular_weight": res_dict.get("exact_mw"),
+                        "formal_charge": res_dict.get("formal_charge"),
+                        "num_rings": res_dict.get("num_rings"),
+                        "prediction_class": res_dict.get("prediction_class"),
                         "error_message": (
                             res_dict.get("error")
                             if res_dict.get("status") != "success"
@@ -444,6 +452,10 @@ async def process_batch_job(
                         "brenk_alert_count": None,
                         "num_heavy_atoms": None,
                         "molecular_formula": None,
+                        "exact_molecular_weight": None,
+                        "formal_charge": None,
+                        "num_rings": None,
+                        "prediction_class": None,
                     }
                     items_for_db_batch.append(item_to_insert_missing_error)
 
