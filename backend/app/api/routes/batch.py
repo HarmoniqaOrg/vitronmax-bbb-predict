@@ -328,7 +328,27 @@ async def process_batch_job(
                     res_dict["molecule_name"] = original_item.get("molecule_name", "")
                     # 'input_smiles' is already in res_dict from predict_smiles_data
 
-                    final_results_for_csv.append(res_dict)
+                    # Prepare a separate dictionary for CSV to handle specific column names
+                    csv_row = (
+                        res_dict.copy()
+                    )  # Start with a copy of all predictor outputs
+
+                    # Map prediction_certainty to bbb_confidence for the CSV
+                    # The predictor output 'prediction_certainty'
+                    # The CSV consumer expects 'bbb_confidence'
+                    csv_row["bbb_confidence"] = csv_row.pop(
+                        "prediction_certainty", None
+                    )
+
+                    # Ensure 'prediction_class' is present (already handled by predictor)
+                    # Ensure 'error' field is handled for CSV (already handled below for res_dict, copy will have it)
+
+                    final_results_for_csv.append(
+                        csv_row
+                    )  # Append the modified dict for CSV
+
+                    # Original res_dict is used for database insertion below,
+                    # which expects 'prediction_certainty'
                     if res_dict.get("status") == "success":
                         processed_count += 1
                     else:
@@ -356,9 +376,7 @@ async def process_batch_job(
                         "row_number": i
                         + 1,  # Assuming 1-based for now, adjust if original row numbers are available
                         "probability": res_dict.get("bbb_probability"),
-                        "prediction_certainty": res_dict.get(
-                            "confidence_score"
-                        ),  # Map from confidence_score
+                        "prediction_certainty": res_dict.get("prediction_certainty"),
                         "applicability_score": res_dict.get("applicability_score"),
                         "model_version": res_dict.get(
                             "model_version", settings.MODEL_VERSION
@@ -376,8 +394,8 @@ async def process_batch_job(
                         "lipinski_rule_of_five_passes": res_dict.get("lipinski_passes"),
                         "pains_alert_count": res_dict.get("pains_alerts"),
                         "brenk_alert_count": res_dict.get("brenk_alerts"),
-                        "num_heavy_atoms": res_dict.get("heavy_atoms"),
-                        "molecular_formula": res_dict.get("mol_formula"),
+                        "num_heavy_atoms": res_dict.get("num_heavy_atoms"),
+                        "molecular_formula": res_dict.get("molecular_formula"),
                         "exact_molecular_weight": res_dict.get("exact_mw"),
                         "formal_charge": res_dict.get("formal_charge"),
                         "num_rings": res_dict.get("num_rings"),

@@ -56,7 +56,7 @@ For complete documentation on the validation methodology, detailed performance m
 ```bash
 # Clone and setup
 git clone <repo-url>
-cd VitronMax
+cd vitronmax-bbb-predict
 
 # Backend setup (Python 3.11+ recommended, use a virtual environment)
 cd backend

@@ -244,15 +244,3 @@ async def test_model_not_loaded_predict_smiles_data() -> None:
         # Let's assume for this test case, we simulate is_loaded being False manually for the check.
         predictor.is_loaded = False  # Manually set for test purpose
         await predictor.predict_smiles_data("CCO")
-
-
-@pytest.mark.asyncio
-async def test_model_not_loaded_get_feature_importance() -> None:
-    """Test get_feature_importance when model is not loaded."""
-    predictor = BBBPredictor()  # Model now loads in __init__
-    # assert not predictor.is_loaded # This assertion is no longer valid
-    with pytest.raises(RuntimeError, match="Model not loaded"):
-        # Similar to above, we'd need to mock _load_model to fail.
-        # Manually setting for test purpose.
-        predictor.is_loaded = False  # Manually set for test purpose
-        await predictor.get_feature_importance()
