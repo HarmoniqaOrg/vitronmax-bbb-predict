@@ -39,7 +39,7 @@ describe('PredictionResult Component', () => {
     // Check existing properties
     expect(screen.getByText('Ethanol')).toBeInTheDocument();
     expect(screen.getByText('85.0%')).toBeInTheDocument(); // bbb_probability
-    expect(screen.getByText('BBB+')).toBeInTheDocument();
+    expect(screen.getAllByText('High Permeability')).toHaveLength(2);
     expect(screen.getByText('92.0%')).toBeInTheDocument(); // confidence_score
     expect(screen.getByText('120.50 ms')).toBeInTheDocument(); // processing_time_ms
     expect(screen.getByText('CCO')).toBeInTheDocument(); // smiles

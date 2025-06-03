@@ -41,8 +41,8 @@ class TestBBBPredictorProperties:
         assert properties["rot_bonds"] == 2
         assert properties["h_acceptors"] == 3
         assert properties["h_donors"] == 1
-        assert properties["heavy_atoms"] == 13
-        assert properties["mol_formula"] == "C9H8O4"
+        assert properties["num_heavy_atoms"] == 13  # Changed key
+        assert properties["molecular_formula"] == "C9H8O4"  # Changed key
         assert properties["frac_csp3"] == approx(
             1 / 9, rel=1e-2
         )  # Aspirin: 1 CH3 (sp3) / 9 total C
