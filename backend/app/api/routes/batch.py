@@ -356,7 +356,9 @@ async def process_batch_job(
                         "row_number": i
                         + 1,  # Assuming 1-based for now, adjust if original row numbers are available
                         "probability": res_dict.get("bbb_probability"),
-                        "prediction_certainty": res_dict.get("prediction_certainty"),
+                        "prediction_certainty": res_dict.get(
+                            "confidence_score"
+                        ),  # Map from confidence_score
                         "applicability_score": res_dict.get("applicability_score"),
                         "model_version": res_dict.get(
                             "model_version", settings.MODEL_VERSION

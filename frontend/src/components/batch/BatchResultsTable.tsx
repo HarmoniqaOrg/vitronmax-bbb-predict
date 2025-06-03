@@ -297,8 +297,8 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
           </div>
 
           {/* Results Table */}
-          <div className="border rounded-md">
-            <Table>
+          <div className="border rounded-md overflow-x-auto">
+            <Table style={{ minWidth: '2770px' }}>
               <TableHeader style={{ position: 'sticky', top: 0, zIndex: 1, background: 'hsl(var(--card))' }}>
                 <TableRow>
                   <TableHead className="w-[150px]"><Button variant="ghost" onClick={() => handleSort('smiles')}>SMILES{sortBy === 'smiles' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
@@ -354,7 +354,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                       <TableCell className="text-right">{result.bbb_probability?.toFixed(3) ?? 'N/A'}</TableCell>
                       <TableCell>{getPredictionBadge(result)}</TableCell>
                       <TableCell>{result.bbb_class || 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.prediction_certainty?.toFixed(1) ?? 'N/A'}%</TableCell>
+                      <TableCell className="text-right">{typeof result.prediction_certainty === 'number' ? (result.prediction_certainty * 100).toFixed(1) + '%' : 'N/A'}</TableCell>
                       <TableCell className="text-right">{result.applicability_score?.toFixed(3) ?? 'N/A'}</TableCell>
                       <TableCell className="text-right">{result.mw?.toFixed(2) ?? 'N/A'}</TableCell>
                       <TableCell className="text-right">{result.exact_mw?.toFixed(2) ?? 'N/A'}</TableCell>
