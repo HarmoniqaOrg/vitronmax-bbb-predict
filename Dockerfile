@@ -21,11 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy sample_data for applicability domain scoring
+COPY sample_data /app/sample_data
+
 # Copy application code
-COPY . .
+COPY backend/. /app/
 
 # Create models directory
 RUN mkdir -p models

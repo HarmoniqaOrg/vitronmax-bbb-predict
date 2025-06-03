@@ -73,8 +73,15 @@ npm install
 npm run dev
 
 # Docker deployment
+# (Assumes Dockerfile is at the project root)
 docker build -t vitronmax .
 docker run -p 8080:8080 vitronmax
+
+# For Fly.io deployment:
+# - Ensure `fly.toml` and `Dockerfile` are at the project root.
+# - Run `fly deploy` from the project root directory.
+# - The `APP_PROJECT_ROOT_ENV` environment variable in `fly.toml` should be set (e.g., to "/app")
+#   to ensure correct path resolution within the Docker container.
 ```
 
 ## 📚 Documentation
@@ -119,6 +126,8 @@ STORAGE_BUCKET_NAME=vitronmax-storage # Ensure this bucket exists in your Supaba
 LOG_LEVEL=INFO
 ENV=development # 'production', 'test', or 'development'
 MODEL_PATH=models/default_model.joblib # Optional: path to your trained model relative to the backend directory
+APP_PROJECT_ROOT_ENV=/app # For containerized deployments (like Fly.io, set in fly.toml), defines the project root inside the container.
+                         # Not typically needed in local .env if running Python directly without Docker.
 ```
 
 ## 📄 License

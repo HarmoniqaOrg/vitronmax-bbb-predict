@@ -77,11 +77,28 @@ async def get_platform_statistics(
                         # If parsing issues arise, we might need strptime like in batch.py
 
                         # Simplified parsing assuming standard ISO format or 'Z' for UTC
-                        created_at = datetime.fromisoformat(
-                            created_at_str.replace("Z", "+00:00")
+                        # Prepare for strptime: remove colon from timezone offset if present
+                        if (
+                            isinstance(created_at_str, str)
+                            and len(created_at_str) > 6
+                            and created_at_str[-3] == ":"
+                        ):
+                            created_at_str = created_at_str[:-3] + created_at_str[-2:]
+                        if (
+                            isinstance(completed_at_str, str)
+                            and len(completed_at_str) > 6
+                            and completed_at_str[-3] == ":"
+                        ):
+                            completed_at_str = (
+                                completed_at_str[:-3] + completed_at_str[-2:]
+                            )
+
+                        # Parse with strptime, supporting microseconds and timezone offset without colon
+                        created_at = datetime.strptime(
+                            created_at_str, "%Y-%m-%dT%H:%M:%S.%f%z"
                         )
-                        completed_at = datetime.fromisoformat(
-                            completed_at_str.replace("Z", "+00:00")
+                        completed_at = datetime.strptime(
+                            completed_at_str, "%Y-%m-%dT%H:%M:%S.%f%z"
                         )
 
                         processing_time = completed_at - created_at

@@ -64,13 +64,25 @@ class BBBPredictor:
             self.pains_catalog = None
             self.brenk_catalog = None
 
-        # Load training fingerprints for applicability score
+        # Load training data fingerprints for applicability domain scoring
+        logger.warning(
+            f"BBBPredictor: PROJECT_ROOT for training data path is: {settings.PROJECT_ROOT}"
+        )
+        self.training_data_path = (
+            settings.PROJECT_ROOT / "sample_data" / "training_dataset.csv"
+        )
+        logger.warning(
+            f"BBBPredictor: Full training_data_path is: {self.training_data_path}"
+        )
+        logger.warning(
+            f"BBBPredictor: Attempting to load training data from: {self.training_data_path}"
+        )
         try:
             self._load_training_fingerprints()
         except Exception as e:
             logger.error(f"Failed to load training fingerprints: {e}", exc_info=True)
             # self._training_fps will remain empty, applicability score will be None
-        logger.info(
+        logger.warning(
             f"BBBPredictor initialized. Training FPs loaded: {len(self._training_fps) if self._training_fps else 0}"
         )
 
@@ -119,32 +131,42 @@ class BBBPredictor:
         self.is_loaded = True
 
     def _load_training_fingerprints(self) -> None:
-        """Load Morgan fingerprints from the training dataset for applicability scoring."""
-        # Path to the training data CSV file
-        # Assumes predictor.py is in backend/app/ml/, and sample_data is at project root
-        training_data_path = (
-            Path(__file__)
-            .resolve()
-            .parent.parent.parent.parent  # Adjusted to point to project root
-            / "sample_data"
-            / "training_dataset.csv"
+        """Loads and preprocesses training data fingerprints from the CSV file."""
+        logger.warning("BBBPredictor: Attempting to load training fingerprints...")
+        self.training_data_path = (
+            settings.PROJECT_ROOT / "sample_data" / "training_dataset.csv"
+        )
+        logger.warning(
+            f"_load_training_fingerprints: PROJECT_ROOT for training data path is: {settings.PROJECT_ROOT}"
+        )
+        logger.warning(
+            f"_load_training_fingerprints: Full training_data_path is: {self.training_data_path}"
+        )
+        logger.warning(
+            f"_load_training_fingerprints: Attempting to load training data from: {self.training_data_path}"
         )
 
-        if not training_data_path.exists():
+        if not self.training_data_path.exists():
+            logger.error(
+                f"_load_training_fingerprints: Training data CSV file NOT FOUND at: {self.training_data_path}"
+            )
+            self._training_fps = []
             logger.warning(
-                f"Training dataset for applicability score not found at {training_data_path}. "
-                f"Applicability score will not be calculated."
+                f"Exiting _load_training_fingerprints due to file not found. Count: {len(self._training_fps)}"
             )
             return
 
+        logger.warning(
+            f"_load_training_fingerprints: Training data CSV file FOUND at: {self.training_data_path}"
+        )
         try:
-            df = pd.read_csv(training_data_path)
-            logger.info(
-                f"Training data CSV loaded. Shape: {df.shape}, Columns: {df.columns.tolist()}"
+            df = pd.read_csv(self.training_data_path)
+            logger.warning(
+                f"_load_training_fingerprints: Training data CSV loaded. Shape: {df.shape}, Columns: {df.columns.tolist()}"
             )
             if "smiles" not in df.columns:
                 logger.warning(
-                    f"'smiles' column not found in {training_data_path}. "
+                    f"'smiles' column not found in {self.training_data_path}. "
                     f"Applicability score will not be calculated."
                 )
                 return
@@ -178,13 +200,16 @@ class BBBPredictor:
                     logger.debug(
                         f"Error generating fingerprint for training SMILES '{smi}' at index {smi_idx}: {e_fp_gen}"
                     )
-            logger.info(
-                f"Processed {processed_rows} rows from training data. Valid SMILES strings: {valid_smiles_count}, Parsed RDKit mols: {parsed_mols_count}, FPs generated and stored: {count}"
+            logger.warning(
+                f"_load_training_fingerprints: Processed {processed_rows} rows from training data. "
+                f"Valid SMILES strings: {valid_smiles_count}, "
+                f"Parsed RDKit mols: {parsed_mols_count}, "
+                f"FPs generated and stored: {count}"
             )
 
             if count > 0:
-                logger.info(
-                    f"Loaded {count} training fingerprints for applicability score."
+                logger.warning(
+                    f"_load_training_fingerprints: Loaded {count} training fingerprints for applicability score."
                 )
             else:
                 logger.warning(
@@ -192,7 +217,7 @@ class BBBPredictor:
                 )
         except Exception as e:
             logger.error(
-                f"Error loading training fingerprints from {training_data_path}: {e}",
+                f"Error loading training fingerprints from {self.training_data_path}: {e}",
                 exc_info=True,
             )
             self._training_fps = []  # Ensure it's empty on error

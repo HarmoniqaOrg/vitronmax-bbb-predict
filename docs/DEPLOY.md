@@ -47,6 +47,8 @@ STORAGE_BUCKET_NAME=vitronmax-storage
 FLY_API_TOKEN=your_fly_token # Specific to Fly.io deployment
 LOG_LEVEL=INFO
 ENV=production # Ensure this is set to 'production' for deployed environments
+APP_PROJECT_ROOT_ENV=/app # For containerized deployments (like Fly.io, set in fly.toml), defines the project root inside the container.
+                         # Not typically needed in local .env if running Python directly without Docker.
 ```
 
 ## 3. Deploying the Backend
@@ -55,7 +57,7 @@ When deploying the backend, ensure that the Python environment uses the pinned v
 
 ### Initial Deployment
 
-1. Navigate to the backend directory
+1. Navigate to the project root directory (where `fly.toml` and `Dockerfile` are located).
 2. Run `flyctl launch` to create a new app
    - Choose a unique name like `vitronmax-api`
    - Choose the nearest region to your users
@@ -69,8 +71,11 @@ When deploying the backend, ensure that the Python environment uses the pinned v
    flyctl secrets set ENV=production
    flyctl secrets set LOG_LEVEL=INFO
    # flyctl secrets set MODEL_PATH=models/default_model.joblib # Set if using a non-default path
+   # Note: APP_PROJECT_ROOT_ENV is typically set in fly.toml (e.g., APP_PROJECT_ROOT_ENV = "/app")
+   # and not as a Fly.io secret. This variable is crucial for the application to correctly
+   # locate project files (like training_dataset.csv) within the Docker container.
    ```
-4. Deploy the application:
+4. Deploy the application (ensure you are in the project root directory):
    ```
    flyctl deploy
    ```

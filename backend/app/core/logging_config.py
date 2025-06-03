@@ -26,7 +26,7 @@ def setup_logging() -> None:
     root_logger.addHandler(console_handler)
 
     # Configure specific loggers
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("app.ml.predictor").setLevel(
         logging.DEBUG

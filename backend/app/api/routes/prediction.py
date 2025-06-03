@@ -62,7 +62,7 @@ async def predict_molecule_data(
         if prediction_data.get("status") == "success":
             try:
                 item_to_insert = {
-                    "id": uuid.uuid4(),
+                    "id": str(uuid.uuid4()),
                     "smiles": prediction_data.get("smiles"),
                     "molecule_name": request.molecule_name,
                     "bbb_probability": prediction_data.get("bbb_probability"),

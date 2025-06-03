@@ -3,11 +3,23 @@ Application configuration settings.
 """
 
 from typing import List, Optional
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
+
+    # Project root path
+    # Project root path. Prioritize APP_PROJECT_ROOT env var, then fall back to relative path.
+    # This allows overriding for containerized environments.
+    APP_PROJECT_ROOT_ENV: Optional[str] = None
+
+    @property
+    def PROJECT_ROOT(self) -> Path:
+        if self.APP_PROJECT_ROOT_ENV:
+            return Path(self.APP_PROJECT_ROOT_ENV)
+        return Path(__file__).resolve().parent.parent.parent.parent
 
     # App settings
     APP_NAME: str = "VitronMax"

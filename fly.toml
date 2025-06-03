@@ -8,6 +8,7 @@ primary_region = "fra"
   LOG_LEVEL = "INFO"
   ENV = "production"
   STORAGE_BUCKET_NAME = "vitronmax-storage"
+  APP_PROJECT_ROOT_ENV = "/app"
 
 [http_service]
   internal_port = 8080
