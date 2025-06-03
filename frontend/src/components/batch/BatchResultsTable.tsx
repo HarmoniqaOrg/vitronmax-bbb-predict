@@ -21,7 +21,43 @@ import {
 import { Search, Download, Filter, ArrowUpDown } from 'lucide-react';
 import { SmilesStructure } from '@/components/batch/SmilesStructure';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import {
+  ColumnDef,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  flexRender,
+  SortingState,
+} from '@tanstack/react-table';
 import type { MoleculeResult } from '@/lib/types';
+
+// Helper function for rendering prediction badges (defined outside component for stability)
+const getPredictionBadge = (result: MoleculeResult) => {
+  if (result.error) {
+    return <Badge variant="destructive">Error</Badge>;
+  }
+  
+  const probability = result.bbb_probability;
+  if (result.bbb_class === 'permeable') {
+    if (typeof probability === 'number' && probability >= 0.7) {
+      return <Badge className="bg-green-600">High Permeability</Badge>;
+    } else if (typeof probability === 'number' && probability < 0.3) {
+      return <Badge className="bg-red-600">Low Permeability</Badge>;
+    } else {
+      return <Badge className="bg-yellow-600">Moderate Permeability</Badge>; 
+    }
+  } else if (result.bbb_class === 'non_permeable') {
+     if (typeof probability === 'number' && probability < 0.3) {
+      return <Badge className="bg-red-600">Low Permeability</Badge>;
+    } else if (typeof probability === 'number' && probability >= 0.7) {
+       return <Badge className="bg-green-600">High Permeability</Badge>;
+    } else {
+      return <Badge className="bg-yellow-600">Moderate Permeability</Badge>;
+    }
+  } else {
+    return <Badge className="bg-yellow-600">Moderate</Badge>;
+  }
+};
 
 interface BatchResultsTableProps {
   results: MoleculeResult[];
@@ -34,9 +70,75 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
   const [filterClass, setFilterClass] = useState<string>('all');
   const [sortBy, setSortBy] = useState<keyof MoleculeResult | 'name'>('bbb_probability');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const ROW_ESTIMATE_SIZE = 75; // Estimated height for a row in pixels
+
+  // Column Definitions for TanStack Table (Memoized for stability)
+  // getPredictionBadge is now defined outside, so columns memoization is stable with []
+  const columns: ColumnDef<MoleculeResult>[] = useMemo(() => [
+    {
+      id: 'index',
+      header: 'No.',
+      cell: ({ row }) => row.index + 1,
+      size: 60, // Adjusted size
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'smiles',
+      header: 'SMILES',
+      cell: info => <SmilesStructure smiles={info.getValue<string>()} />,
+      size: 300,
+    },
+    {
+      accessorKey: 'molecule_name',
+      header: 'Molecule Name',
+      cell: info => <span className="truncate" style={{ maxWidth: '180px'}} title={info.getValue<string>() || ''}>{info.getValue<string>() || 'N/A'}</span>,
+      size: 200,
+    },
+    {
+      accessorKey: 'bbb_probability',
+      header: 'BBB Prob.',
+      cell: info => {
+        const val = info.getValue<number | null>();
+        return val?.toFixed(3) ?? 'N/A';
+      },
+      size: 120, // Adjusted size
+    },
+    {
+      accessorKey: 'bbb_class',
+      header: 'Prediction Class',
+      cell: ({ row }) => getPredictionBadge(row.original),
+      size: 150, // Adjusted size
+    },
+    {
+      accessorKey: 'prediction_certainty', // Keep for data model
+      header: 'Confidence',
+      cell: info => {
+        const val = info.getValue<number | null>();
+        return typeof val === 'number' ? (val * 100).toFixed(1) + '%' : 'N/A';
+      },
+      size: 120,
+    },
+    {
+      accessorKey: 'applicability_score',
+      header: 'Applicability',
+      cell: info => {
+        const val = info.getValue<number | null>();
+        return val?.toFixed(3) ?? 'N/A';
+      },
+      size: 120,
+    },
+    {
+      accessorKey: 'error',
+      header: 'Status',
+      cell: ({ row }) => row.original.error ? <Badge variant="destructive" title={row.original.error}>Error</Badge> : <Badge variant="secondary">Success</Badge>,
+      size: 100,
+      enableSorting: false,
+    }
+    // TODO: Add other columns (MW, LogP, TPSA, etc.) with appropriate headers and cell renderers
+  ], []); // Empty dependency array as getPredictionBadge is stable (defined outside)
 
   const handleSort = (column: keyof MoleculeResult | 'name') => {
     if (sortBy === column) {
@@ -51,7 +153,55 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
     setColumnFilters(prev => ({ ...prev, [columnId]: value }));
   };
 
-  const filteredAndSortedResults = useMemo(() => {
+  // Keep existing filtering logic for now, TanStack will take over sorting on the filtered set
+  const justFilteredResults = useMemo(() => {
+    let filtered = results;
+
+    // Apply column filters (text inputs)
+    Object.entries(columnFilters).forEach(([key, value]) => {
+      if (value) {
+        const filterValue = value.toLowerCase();
+        filtered = filtered.filter(result => {
+          if (key === 'smiles') {
+            return result.smiles.toLowerCase().includes(filterValue);
+          }
+          if (key === 'molecule_name') {
+            return result.molecule_name?.toLowerCase().includes(filterValue) ?? false;
+          }
+          return true;
+        });
+      }
+    });
+
+    // Apply class filter (dropdown)
+    if (filterClass !== 'all') {
+      filtered = filtered.filter(result => {
+        if (filterClass === 'error') return !!result.error;
+        if (filterClass === 'BBB+') return result.bbb_class === 'permeable' && !result.error;
+        if (filterClass === 'BBB-') return result.bbb_class === 'non_permeable' && !result.error;
+        return true; 
+      });
+    }
+    // Sorting is now handled by TanStack Table, so we only return the filtered results here.
+    return filtered;
+  }, [results, columnFilters, filterClass]);
+
+  // TanStack Table instance
+  const table = useReactTable<MoleculeResult>({
+    data: justFilteredResults, // Use filtered results; TanStack will handle sorting on this set
+    columns,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const tableRows = table.getRowModel().rows;
+
+  // This const is now just for the CardTitle, TanStack drives the table rows
+  const filteredAndSortedResults = justFilteredResults; // Or table.getRowModel().rows.map(r => r.original) for display count
     let filtered = results;
 
     // Apply column filters
@@ -78,60 +228,26 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
       });
     }
     
-    // Apply sorting
-    filtered.sort((a, b) => {
-      let aValue: number | string;
-      let bValue: number | string;
-      
-      if (sortBy === 'name') {
-        aValue = a.molecule_name || a.smiles;
-        bValue = b.molecule_name || b.smiles;
-        return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-      }
 
-      // Ensure sortBy is a valid key of MoleculeResult for numeric/string comparison
-      const sortKey = sortBy as keyof MoleculeResult;
-      if (typeof a[sortKey] === 'number' && typeof b[sortKey] === 'number') {
-        aValue = a[sortKey] as number;
-        bValue = b[sortKey] as number;
-        return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-      } else if (typeof a[sortKey] === 'string' && typeof b[sortKey] === 'string') {
-        aValue = a[sortKey] as string;
-        bValue = b[sortKey] as string;
-        return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-      } else {
-        // Fallback for mixed types or other types - can be refined
-        const aStr = String(a[sortKey]);
-        const bStr = String(b[sortKey]);
-        return sortOrder === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
-      }
-    });
-
-    return filtered;
-  }, [results, columnFilters, filterClass, sortBy, sortOrder]);
 
   const rowVirtualizer = useVirtualizer({
-    count: filteredAndSortedResults.length,
+    count: tableRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_ESTIMATE_SIZE,
     overscan: 5, // Render 5 items above and below the visible area
   });
 
-  const getPredictionBadge = (result: MoleculeResult) => {
-    if (result.error) {
-      return <Badge variant="destructive">Error</Badge>;
-    }
-    
-    const probability = result.bbb_probability;
-    // Standardize to 'permeable' and 'non_permeable' for badge display
-    if (result.bbb_class === 'permeable') { // Assuming bbb_class is 'permeable' or 'non_permeable'
-      return <Badge className="bg-green-600">Permeable</Badge>;
-    } else if (result.bbb_class === 'non_permeable') {
-      return <Badge className="bg-red-600">Non-Permeable</Badge>;
-    } else { // Fallback for other potential values or moderate if defined
-      return <Badge className="bg-yellow-600">Moderate</Badge>; // Or handle as error/unknown
-    }
-  };
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">
+            <p>Loading results...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const exportToCSV = () => {
     const headers = [
@@ -184,18 +300,6 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
   const errorCount = results.filter(r => r.error).length;
   const highPermeability = results.filter(r => !r.error && r.bbb_probability >= 0.7).length;
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center py-8">
-            <p>Loading results...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
@@ -246,8 +350,7 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            
+          <div className="flex flex-col md:flex-row gap-4 mb-6"> {/* Filter controls div */}
             <Select value={filterClass} onValueChange={setFilterClass}>
               <SelectTrigger className="w-48">
                 <Filter className="mr-2 h-4 w-4" />
@@ -255,14 +358,15 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Results</SelectItem>
-                <SelectItem value="BBB+">High Permeability</SelectItem>
-                <SelectItem value="BBB-">Low Permeability</SelectItem>
+                <SelectItem value="BBB+">High Permeability</SelectItem> {/* Corresponds to 'permeable' class */}
+                <SelectItem value="BBB-">Low Permeability</SelectItem> {/* Corresponds to 'non_permeable' class */}
                 <SelectItem value="error">Errors Only</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
               const [col, order] = value.split('-');
+              // This state is now de-synced from TanStack's sorting. Will be fixed later.
               setSortBy(col as keyof MoleculeResult | 'name');
               setSortOrder(order as 'asc' | 'desc');
             }}>
@@ -299,51 +403,42 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                 <SelectItem value="num_rings-desc">Num Rings (High to Low)</SelectItem>
               </SelectContent>
             </Select>
+          </div> {/* End of filter controls div */}
 
-          </div>
+          {/* Scrollable Table Area */}
           <div ref={parentRef} className="overflow-auto h-[600px] border rounded-md" style={{ minWidth: '100%' }}>
             <Table className="min-w-full table-fixed">
               <TableHeader className="sticky top-0 bg-background z-10">
-                <TableRow>
-                  <TableHead className="w-[80px] px-2 py-3">No.</TableHead>
-                  <TableHead 
-                    className="w-[300px] px-2 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => handleSort('smiles')}
-                  >
-                    SMILES {sortBy === 'smiles' && (sortOrder === 'asc' ? <ArrowUpDown className="inline h-4 w-4" /> : <ArrowUpDown className="inline h-4 w-4" />)}
-                  </TableHead>
-                  <TableHead 
-                    className="w-[200px] px-2 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => handleSort('name')}
-                  >
-                    Molecule Name {sortBy === 'name' && (sortOrder === 'asc' ? <ArrowUpDown className="inline h-4 w-4" /> : <ArrowUpDown className="inline h-4 w-4" />)}
-                  </TableHead>
-                  <TableHead 
-                    className="w-[150px] px-2 py-3 text-right cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => handleSort('bbb_probability')}
-                  >
-                    BBB Prob. {sortBy === 'bbb_probability' && (sortOrder === 'asc' ? <ArrowUpDown className="inline h-4 w-4" /> : <ArrowUpDown className="inline h-4 w-4" />)}
-                  </TableHead>
-                  <TableHead className="w-[180px] px-2 py-3">Prediction Class</TableHead>
-                  <TableHead 
-                    className="w-[150px] px-2 py-3 text-right cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => handleSort('prediction_certainty')}
-                  >
-                    Confidence {sortBy === 'prediction_certainty' && (sortOrder === 'asc' ? <ArrowUpDown className="inline h-4 w-4" /> : <ArrowUpDown className="inline h-4 w-4" />)}
-                  </TableHead>
-                  <TableHead className="w-[150px] px-2 py-3 text-right">Applicability</TableHead>
-                  <TableHead className="w-[120px] px-2 py-3 text-right">MW</TableHead>
-                  <TableHead className="w-[120px] px-2 py-3 text-right">LogP</TableHead>
-                  <TableHead className="w-[120px] px-2 py-3 text-right">TPSA</TableHead>
-                  <TableHead className="w-[100px] px-2 py-3 text-center">Error</TableHead>
-                </TableRow>
-                {/* Row for column filter inputs */}
+                {table.getHeaderGroups().map(headerGroup => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <TableHead 
+                        key={header.id}
+                        style={{ width: header.getSize() }}
+                        className={`px-2 py-3 ${header.column.getCanSort() ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                        {{
+                          asc: <ArrowUpDown className="inline h-4 w-4 ml-2" />, 
+                          desc: <ArrowUpDown className="inline h-4 w-4 ml-2" />,
+                        }[header.column.getIsSorted() as string] ?? null}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+                {/* Row for column filter inputs - This needs to be integrated with TanStack's column filtering system */}
                 <TableRow className="border-t">
-                  <TableCell className="p-1"></TableCell> {/* Empty for No. column */}
+                  <TableCell className="p-1"></TableCell> {/* For Index column */}
                   <TableCell className="p-1">
                     <Input
                       placeholder="Filter SMILES..."
-                      value={columnFilters['smiles'] || ''}
+                      value={(columnFilters['smiles'] || '') as string}
                       onChange={(e) => handleColumnFilterChange('smiles', e.target.value)}
                       className="h-8 text-xs"
                     />
@@ -351,43 +446,30 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                   <TableCell className="p-1">
                     <Input
                       placeholder="Filter Name..."
-                      value={columnFilters['molecule_name'] || ''}
+                      value={(columnFilters['molecule_name'] || '') as string}
                       onChange={(e) => handleColumnFilterChange('molecule_name', e.target.value)}
                       className="h-8 text-xs"
                     />
                   </TableCell>
-                  <TableCell className="p-1"></TableCell> {/* Empty for BBB Prob. */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for Prediction Class (handled by dropdown) */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for Confidence */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for Applicability */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for MW */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for LogP */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for TPSA */}
-                  <TableCell className="p-1"></TableCell> {/* Empty for Error */}
-                  <TableHead className="w-[110px] text-right"><Button variant="ghost" onClick={() => handleSort('molar_refractivity')}>Molar Refr.{sortBy === 'molar_refractivity' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[90px] text-right"><Button variant="ghost" onClick={() => handleSort('h_donors')}>H-Donors{sortBy === 'h_donors' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px] text-right"><Button variant="ghost" onClick={() => handleSort('h_acceptors')}>H-Acceptors{sortBy === 'h_acceptors' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px] text-right"><Button variant="ghost" onClick={() => handleSort('rot_bonds')}>Rot. Bonds{sortBy === 'rot_bonds' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px] text-right"><Button variant="ghost" onClick={() => handleSort('num_rings')}>Num Rings{sortBy === 'num_rings' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px] text-right"><Button variant="ghost" onClick={() => handleSort('frac_csp3')}>Frac Csp3{sortBy === 'frac_csp3' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[110px] text-right"><Button variant="ghost" onClick={() => handleSort('num_heavy_atoms')}>Heavy Atoms{sortBy === 'num_heavy_atoms' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[110px] text-right"><Button variant="ghost" onClick={() => handleSort('formal_charge')}>Formal Chg.{sortBy === 'formal_charge' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px]"><Button variant="ghost" onClick={() => handleSort('gi_absorption')}>GI Absorp.{sortBy === 'gi_absorption' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[90px]"><Button variant="ghost" onClick={() => handleSort('lipinski_passes')}>Lipinski{sortBy === 'lipinski_passes' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[90px] text-right"><Button variant="ghost" onClick={() => handleSort('pains_alerts')}>PAINS{sortBy === 'pains_alerts' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[90px] text-right"><Button variant="ghost" onClick={() => handleSort('brenk_alerts')}>Brenk{sortBy === 'brenk_alerts' && <ArrowUpDown className="ml-2 h-4 w-4" />}</Button></TableHead>
-                  <TableHead className="w-[100px]">Status</TableHead>
+                  {/* Empty cells for other columns, matching the current column definition count (8 columns total) */}
+                  <TableCell className="p-1"></TableCell> {/* BBB Prob. */}
+                  <TableCell className="p-1"></TableCell> {/* Prediction Class */}
+                  <TableCell className="p-1"></TableCell> {/* Confidence */}
+                  <TableCell className="p-1"></TableCell> {/* Applicability */}
+                  <TableCell className="p-1"></TableCell> {/* Status */}
                 </TableRow>
               </TableHeader>
               <TableBody style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
                 {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const result = filteredAndSortedResults[virtualRow.index];
+                  const row = tableRows[virtualRow.index];
+                  if (!row) return null;
+
                   return (
-                    <TableRow 
-                      key={virtualRow.key} 
+                    <TableRow
+                      key={row.id}
                       data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement} // Important for dynamic row heights if ever needed
-                      className={result.error ? 'bg-red-50 dark:bg-red-900/30' : ''}
+                      ref={rowVirtualizer.measureElement}
+                      className={row.original.error ? 'bg-red-50 dark:bg-red-900/30' : ''}
                       style={{
                         position: 'absolute',
                         top: 0,
@@ -397,45 +479,24 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
                     >
-                      <TableCell className="font-mono text-xs break-all">{result.smiles}</TableCell>
-                      <TableCell><SmilesStructure key={result.smiles + '-' + virtualRow.index} smiles={result.smiles} /></TableCell>
-                      <TableCell>{result.molecule_name || 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.bbb_probability?.toFixed(3) ?? 'N/A'}</TableCell>
-                      <TableCell>{getPredictionBadge(result)}</TableCell>
-                      <TableCell>{result.bbb_class || 'N/A'}</TableCell>
-                      <TableCell className="text-right">{typeof result.prediction_certainty === 'number' ? (result.prediction_certainty * 100).toFixed(1) + '%' : 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.applicability_score?.toFixed(3) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.mw?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.exact_mw?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-xs break-all">{result.molecular_formula || 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.logp?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.tpsa?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.log_s_esol?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.molar_refractivity?.toFixed(2) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.h_donors ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.h_acceptors ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.rot_bonds ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.num_rings ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.frac_csp3?.toFixed(3) ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.num_heavy_atoms ?? 'N/A'}</TableCell>
-                      <TableCell className="text-right">{result.formal_charge ?? 'N/A'}</TableCell>
-                      <TableCell>{result.gi_absorption || 'N/A'}</TableCell>
-                      <TableCell>{result.lipinski_passes === null ? 'N/A' : (result.lipinski_passes ? 'Yes' : 'No')}</TableCell>
-                      <TableCell className={`text-right ${result.pains_alerts > 0 ? 'text-red-600 font-semibold' : ''}`}>{result.pains_alerts ?? 'N/A'}</TableCell>
-                      <TableCell className={`text-right ${result.brenk_alerts > 0 ? 'text-red-600 font-semibold' : ''}`}>{result.brenk_alerts ?? 'N/A'}</TableCell>
-                      <TableCell>
-                        {result.error ? (
-                          <Badge variant="destructive" title={result.error}>Error</Badge>
-                        ) : (
-                          <Badge variant="secondary">Success</Badge>
-                        )}
-                      </TableCell>
+                      {row.getVisibleCells().map(cell => (
+                        <TableCell 
+                          key={cell.id} 
+                          style={{ width: cell.column.getSize() }}
+                          className={`${cell.column.id === 'bbb_probability' || cell.column.id === 'prediction_certainty' || cell.column.id === 'applicability_score' ? 'text-right' : ''} ${cell.column.id === 'smiles' ? 'font-mono text-xs' : ''}`}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   );
                 })}
-                {rowVirtualizer.getVirtualItems().length === 0 && filteredAndSortedResults.length === 0 ? (
+                {tableRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={27} className="h-24 text-center">
+                    <TableCell colSpan={columns.length} className="h-24 text-center">
                       No results found.
                     </TableCell>
                   </TableRow>
