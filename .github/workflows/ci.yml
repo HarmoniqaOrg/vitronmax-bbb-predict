@@ -112,7 +112,8 @@ jobs:
       - name: Build backend Docker image
         uses: docker/build-push-action@v4
         with:
-          context: ./backend
+          context: .
+          dockerfile: ./Dockerfile
           push: false
           tags: vitronmax-api:latest
           cache-from: type=gha
