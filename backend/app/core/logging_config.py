@@ -28,3 +28,6 @@ def setup_logging() -> None:
     # Configure specific loggers
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("app.ml.predictor").setLevel(
+        logging.DEBUG
+    )  # Ensure predictor DEBUG logs are shown
