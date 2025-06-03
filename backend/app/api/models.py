@@ -56,6 +56,17 @@ class SinglePredictionResponse(BaseModel):
     log_s_esol: Optional[float] = Field(
         default=None, description="Estimated aqueous solubility (ESOL model LogS)"
     )
+    exact_mw: Optional[float] = Field(
+        default=None, description="Exact Molecular Weight (g/mol)"
+    )
+    molecular_formula: Optional[str] = Field(
+        default=None, description="Molecular Formula"
+    )
+    formal_charge: Optional[int] = Field(default=None, description="Formal Charge")
+    num_rings: Optional[int] = Field(default=None, description="Number of Rings")
+    num_heavy_atoms: Optional[int] = Field(
+        default=None, description="Number of Heavy Atoms"
+    )
 
     # Drug-likeness & ADME
     gi_absorption: Optional[str] = Field(

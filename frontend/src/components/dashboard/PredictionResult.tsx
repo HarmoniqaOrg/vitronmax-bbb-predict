@@ -12,13 +12,13 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
   const probabilityPercent = (result.bbb_probability * 100).toFixed(1);
   
   const displayPredictionCertainty = 
-    typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
-      ? (result.confidence_score * 100).toFixed(1) + '%'
+    typeof result.prediction_certainty === 'number' && !isNaN(result.prediction_certainty)
+      ? (result.prediction_certainty * 100).toFixed(1) + '%'
       : 'N/A';
 
   const progressPredictionCertaintyValue =
-    typeof result.confidence_score === 'number' && !isNaN(result.confidence_score)
-      ? result.confidence_score * 100
+    typeof result.prediction_certainty === 'number' && !isNaN(result.prediction_certainty)
+      ? result.prediction_certainty * 100
       : 0;
 
   const displayApplicabilityScore =
@@ -51,7 +51,7 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">{getPredictionLabel()}</span>
             <Badge variant="outline" className="ml-2">
-              {result.prediction_class}
+              {result.bbb_class}
             </Badge>
           </div>
           <Progress 
@@ -115,7 +115,7 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
           </div>
           <div>
             <p className="text-muted-foreground">Molecular Formula</p>
-            <p>{result.mol_formula ?? 'N/A'}</p>
+            <p>{result.molecular_formula ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">LogP</p>
@@ -155,7 +155,7 @@ const PredictionResult = ({ result }: PredictionResultProps) => {
           </div>
           <div>
             <p className="text-muted-foreground">Heavy Atoms</p>
-            <p>{result.heavy_atoms ?? 'N/A'}</p>
+            <p>{result.num_heavy_atoms ?? 'N/A'}</p>
           </div>
           <div>
             <p className="text-muted-foreground">ESOL LogS (Solubility)</p>

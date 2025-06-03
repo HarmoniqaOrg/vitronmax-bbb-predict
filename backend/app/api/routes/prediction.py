@@ -69,7 +69,7 @@ async def predict_molecule_data(
                     "prediction_class": prediction_data.get(
                         "prediction_class"
                     ),  # Corrected key
-                    "prediction_certainty": prediction_data.get("prediction_certainty"),
+                    "prediction_certainty": prediction_data.get("confidence_score"),
                     "applicability_score": prediction_data.get("applicability_score"),
                     "fingerprint_hash": prediction_data.get(
                         "fingerprint_hash"
@@ -116,6 +116,12 @@ async def predict_molecule_data(
         # Ensure 'bbb_class' is populated for the response model from 'prediction_class'
         if "prediction_class" in prediction_data:
             prediction_data["bbb_class"] = prediction_data["prediction_class"]
+        # Map confidence_score to prediction_certainty for the response model
+        if "confidence_score" in prediction_data:
+            prediction_data["prediction_certainty"] = prediction_data.pop(
+                "confidence_score"
+            )
+
         logger.debug(
             f"Final prediction_data before SinglePredictionResponse: {prediction_data}"
         )

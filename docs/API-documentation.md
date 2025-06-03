@@ -36,7 +36,7 @@ Check if the API is running.
 ### Single Molecule Prediction
 
 ```
-POST /predict_fp
+POST /predict
 ```
 
 Predict BBB permeability for a single molecule using fingerprint analysis.
@@ -57,9 +57,9 @@ Predict BBB permeability for a single molecule using fingerprint analysis.
   "smiles": "CCO",
   "molecule_name": "Ethanol",
   "bbb_probability": 0.72,
-  "prediction_class": "permeable",
+  "bbb_class": "permeable",
   "confidence_score": 0.88,
-  "fingerprint_features": [0, 1, 0, 0, 1, ...],  // First 10 features
+  "applicability_score": 0.75,
   "processing_time_ms": 357.2
 }
 ```
@@ -131,8 +131,9 @@ A CSV file with headers:
 - `smiles`
 - `molecule_name`
 - `bbb_probability`
-- `prediction_class`
+- `bbb_class`
 - `confidence_score`
+- `applicability_score`
 - `error` (only for failed predictions)
 
 ### Generate PDF Report

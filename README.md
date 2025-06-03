@@ -100,7 +100,7 @@ npx playwright test
 
 ## 📈 API Endpoints
 
-- `POST /predict_fp` - Single molecule prediction
+- `POST /predict` - Single molecule prediction
 - `POST /batch_predict_csv` - Batch processing
 - `GET /batch_status/{id}` - Job status
 - `GET /download/{id}` - Download results

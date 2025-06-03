@@ -8,8 +8,8 @@ describe('PredictionResult Component', () => {
     smiles: 'CCO',
     molecule_name: 'Ethanol',
     bbb_probability: 0.85,
-    prediction_class: 'BBB+',
-    confidence_score: 0.92,
+    bbb_class: 'BBB+', // Changed from prediction_class
+    prediction_certainty: 0.92, // Changed from confidence_score
     processing_time_ms: 120.5,
     mw: 46.07,
     logp: -0.31,
@@ -23,7 +23,14 @@ describe('PredictionResult Component', () => {
     molar_refractivity: 12.95,
     num_rings: 0,
     exact_mw: 46.04186,
-    applicability_score: 0.75, // Added for completeness
+    applicability_score: 0.75, 
+    molecular_formula: 'C2H6O', // Added
+    num_heavy_atoms: 3, // Added
+    // Ensure all other relevant fields from MoleculeResult are present or intentionally omitted
+    frac_csp3: 0.5, // Example value, ensure it's covered if displayed
+    log_s_esol: -0.5, // Example value
+    gi_absorption: 'High', // Example value
+    lipinski_passes: true // Example value
   };
 
   it('should render all properties correctly when provided', () => {
@@ -89,6 +96,29 @@ describe('PredictionResult Component', () => {
 
     expect(screen.getByText('Exact MW')).toBeInTheDocument();
     expect(screen.getByText('46.04')).toBeInTheDocument(); // exact_mw (note: toFixed(2) in component)
+
+    expect(screen.getByText('Molecular Formula')).toBeInTheDocument();
+    expect(screen.getByText('C2H6O')).toBeInTheDocument();
+
+    expect(screen.getByText('Heavy Atoms')).toBeInTheDocument();
+    const heavyAtomsValue = screen.getByText((content, element) =>
+      element.tagName.toLowerCase() === 'p' &&
+      content === '3' &&
+      element.previousElementSibling?.textContent === 'Heavy Atoms'
+    );
+    expect(heavyAtomsValue).toBeInTheDocument();
+
+    expect(screen.getByText('Fraction CSP3')).toBeInTheDocument();
+    expect(screen.getByText('0.50')).toBeInTheDocument(); // frac_csp3 (toFixed(2))
+
+    expect(screen.getByText('ESOL LogS (Solubility)')).toBeInTheDocument();
+    expect(screen.getByText('-0.50')).toBeInTheDocument(); // log_s_esol (toFixed(2))
+
+    expect(screen.getByText('GI Absorption')).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
+
+    expect(screen.getByText("Lipinski's Rule")).toBeInTheDocument();
+    expect(screen.getByText('Passes')).toBeInTheDocument();
 
     // Check structural alerts (no highlighting in this case)
     expect(screen.getByText('PAINS Alerts')).toBeInTheDocument();
