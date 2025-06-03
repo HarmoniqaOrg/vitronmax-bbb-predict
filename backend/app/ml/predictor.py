@@ -70,6 +70,9 @@ class BBBPredictor:
         except Exception as e:
             logger.error(f"Failed to load training fingerprints: {e}", exc_info=True)
             # self._training_fps will remain empty, applicability score will be None
+        logger.info(
+            f"BBBPredictor initialized. Training FPs loaded: {len(self._training_fps) if self._training_fps else 0}"
+        )
 
         # Load the pre-trained model
         try:
@@ -135,26 +138,58 @@ class BBBPredictor:
             return
 
         try:
-            df_train = pd.read_csv(training_data_path)
-            if "smiles" not in df_train.columns:
+            df = pd.read_csv(training_data_path)
+            logger.info(
+                f"Training data CSV loaded. Shape: {df.shape}, Columns: {df.columns.tolist()}"
+            )
+            if "smiles" not in df.columns:
                 logger.warning(
                     f"'smiles' column not found in {training_data_path}. "
                     f"Applicability score will not be calculated."
                 )
                 return
 
-            count = 0
-            for smiles_str in df_train["smiles"]:
-                mol = Chem.MolFromSmiles(smiles_str)
-                if mol:
-                    fp = AllChem.GetMorganFingerprintAsBitVect(
-                        mol, radius=2, nBits=settings.FP_NBITS
+            processed_rows = 0
+            valid_smiles_count = 0
+            parsed_mols_count = 0
+            count = 0  # Successfully generated FPs
+            for smi_idx, smi in enumerate(df["smiles"]):
+                processed_rows += 1
+                if pd.isna(smi):
+                    logger.debug(
+                        f"Skipping NaN SMILES in training data at index {smi_idx}: '{smi}'"
                     )
-                    self._training_fps.append(fp)
-                    count += 1
+                    continue
+                valid_smiles_count += 1
+                try:
+                    mol = Chem.MolFromSmiles(str(smi))
+                    if mol:
+                        parsed_mols_count += 1
+                        fp = AllChem.GetMorganFingerprintAsBitVect(
+                            mol, radius=settings.FP_RADIUS, nBits=settings.FP_NBITS
+                        )
+                        self._training_fps.append(fp)
+                        count += 1
+                    else:
+                        logger.debug(
+                            f"Could not parse SMILES in training data at index {smi_idx}: '{smi}'"
+                        )
+                except Exception as e_fp_gen:
+                    logger.debug(
+                        f"Error generating fingerprint for training SMILES '{smi}' at index {smi_idx}: {e_fp_gen}"
+                    )
             logger.info(
-                f"Successfully loaded {count} fingerprints from {training_data_path} for applicability scoring."
+                f"Processed {processed_rows} rows from training data. Valid SMILES strings: {valid_smiles_count}, Parsed RDKit mols: {parsed_mols_count}, FPs generated and stored: {count}"
             )
+
+            if count > 0:
+                logger.info(
+                    f"Loaded {count} training fingerprints for applicability score."
+                )
+            else:
+                logger.warning(
+                    "No training fingerprints loaded for applicability score."
+                )
         except Exception as e:
             logger.error(
                 f"Error loading training fingerprints from {training_data_path}: {e}",
@@ -372,12 +407,18 @@ class BBBPredictor:
             final_result_data["fingerprint_features"] = fp_numpy_array.tolist()
 
             # Calculate applicability score
+            logger.debug(
+                f"Applicability score input: Training FPs count = {len(self._training_fps) if self._training_fps else 0}, Input mol RDKit FP is None = {fp_rdkit_obj is None}"
+            )
             if (
                 self._training_fps and fp_rdkit_obj
             ):  # Ensure training FPs and current mol FP are available
                 try:
                     similarities = DataStructs.BulkTanimotoSimilarity(
                         fp_rdkit_obj, self._training_fps
+                    )
+                    logger.debug(
+                        f"Tanimoto similarities (first 5 if any): {similarities[:5] if similarities else 'None/Empty'}. Total similarities: {len(similarities) if similarities else 0}"
                     )
                     # Ensure similarities list is not empty before calling max()
                     if similarities:
