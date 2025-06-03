@@ -18,16 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Download, Filter, ArrowUpDown } from 'lucide-react';
+import { Search, Download, Filter, ArrowUpDown, ColumnsIcon } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SmilesStructure } from '@/components/batch/SmilesStructure';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ColumnDef,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel, // Added for column filtering
   useReactTable,
   flexRender,
   SortingState,
+  ColumnFiltersState, // Added for column filtering state
 } from '@tanstack/react-table';
 import type { MoleculeResult } from '@/lib/types';
 
@@ -66,23 +77,21 @@ interface BatchResultsTableProps {
 }
 
 const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTableProps) => {
-  const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
-  const [filterClass, setFilterClass] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<keyof MoleculeResult | 'name'>('bbb_probability');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [filterClass, setFilterClass] = useState<string>('all'); 
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]); 
+  const [bbbProbabilityRange, setBbbProbabilityRange] = useState<[number, number]>([0, 1]); 
 
   const parentRef = useRef<HTMLDivElement>(null);
-  const ROW_ESTIMATE_SIZE = 75; // Estimated height for a row in pixels
+  const ROW_ESTIMATE_SIZE = 75; 
 
-  // Column Definitions for TanStack Table (Memoized for stability)
-  // getPredictionBadge is now defined outside, so columns memoization is stable with []
+  // Column Definitions for TanStack Table
   const columns: ColumnDef<MoleculeResult>[] = useMemo(() => [
     {
       id: 'index',
       header: 'No.',
       cell: ({ row }) => row.index + 1,
-      size: 60, // Adjusted size
+      size: 60, 
       enableSorting: false,
     },
     {
@@ -104,16 +113,18 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
         const val = info.getValue<number | null>();
         return val?.toFixed(3) ?? 'N/A';
       },
-      size: 120, // Adjusted size
+      size: 120,
+      filterFn: 'inNumberRange', // Use TanStack's built-in range filter
+      enableColumnFilter: true,
     },
     {
       accessorKey: 'bbb_class',
       header: 'Prediction Class',
       cell: ({ row }) => getPredictionBadge(row.original),
-      size: 150, // Adjusted size
+      size: 150, 
     },
     {
-      accessorKey: 'prediction_certainty', // Keep for data model
+      accessorKey: 'prediction_certainty', 
       header: 'Confidence',
       cell: info => {
         const val = info.getValue<number | null>();
@@ -138,42 +149,12 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
       enableSorting: false,
     }
     // TODO: Add other columns (MW, LogP, TPSA, etc.) with appropriate headers and cell renderers
-  ], []); // Empty dependency array as getPredictionBadge is stable (defined outside)
+  ], []); 
 
-  const handleSort = (column: keyof MoleculeResult | 'name') => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('desc');
-    }
-  };
-
-  const handleColumnFilterChange = (columnId: keyof MoleculeResult | 'name', value: string) => {
-    setColumnFilters(prev => ({ ...prev, [columnId]: value }));
-  };
-
-  // Keep existing filtering logic for now, TanStack will take over sorting on the filtered set
-  const justFilteredResults = useMemo(() => {
+  // Apply class filter (dropdown) before data goes to TanStack Table.
+  // Text input filters (SMILES, Molecule Name) are handled by TanStack Table's columnFilters state.
+  const preFilteredResults = useMemo(() => {
     let filtered = results;
-
-    // Apply column filters (text inputs)
-    Object.entries(columnFilters).forEach(([key, value]) => {
-      if (value) {
-        const filterValue = value.toLowerCase();
-        filtered = filtered.filter(result => {
-          if (key === 'smiles') {
-            return result.smiles.toLowerCase().includes(filterValue);
-          }
-          if (key === 'molecule_name') {
-            return result.molecule_name?.toLowerCase().includes(filterValue) ?? false;
-          }
-          return true;
-        });
-      }
-    });
-
-    // Apply class filter (dropdown)
     if (filterClass !== 'all') {
       filtered = filtered.filter(result => {
         if (filterClass === 'error') return !!result.error;
@@ -182,59 +163,34 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
         return true; 
       });
     }
-    // Sorting is now handled by TanStack Table, so we only return the filtered results here.
     return filtered;
-  }, [results, columnFilters, filterClass]);
+  }, [results, filterClass]); 
 
   // TanStack Table instance
   const table = useReactTable<MoleculeResult>({
-    data: justFilteredResults, // Use filtered results; TanStack will handle sorting on this set
+    data: preFilteredResults, 
     columns,
     state: {
       sorting,
+      columnFilters, 
     },
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters, 
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(), 
   });
 
   const tableRows = table.getRowModel().rows;
 
-  // This const is now just for the CardTitle, TanStack drives the table rows
-  const filteredAndSortedResults = justFilteredResults; // Or table.getRowModel().rows.map(r => r.original) for display count
-    let filtered = results;
-
-    // Apply column filters
-    Object.entries(columnFilters).forEach(([key, value]) => {
-      if (value) {
-        const filterValue = value.toLowerCase();
-        filtered = filtered.filter(result => {
-          if (key === 'smiles') {
-            return result.smiles.toLowerCase().includes(filterValue);
-          }
-          if (key === 'molecule_name') {
-            return result.molecule_name?.toLowerCase().includes(filterValue) ?? false;
-          }
-          // Add other column filters here if needed
-          return true;
-        });
-      }
-    });
-
-    // Apply class filter (dropdown)
-    if (filterClass !== 'all') {
-      filtered = filtered.filter(result => {
-        return result.bbb_class === filterClass || (filterClass === 'error' && result.error);
-      });
-    }
-    
-
+  // For CardTitle count, use the length of rows from TanStack table after all filters are applied.
+  const displayRowCount = table.getRowModel().rows.length;
 
   const rowVirtualizer = useVirtualizer({
     count: tableRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_ESTIMATE_SIZE,
-    overscan: 5, // Render 5 items above and below the visible area
+    overscan: 5, 
   });
 
   if (isLoading) {
@@ -258,32 +214,33 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
     ];
     const csvContent = [
       headers.join(','),
-      ...filteredAndSortedResults.map(result => [
-        `"${result.smiles}"`,
-        `"${result.molecule_name || ''}"`,
-        result.bbb_probability?.toFixed(4) ?? 'N/A',
-        `"${result.bbb_class || ''}"`,
-        result.prediction_certainty?.toFixed(4) ?? 'N/A',
-        result.applicability_score?.toFixed(4) ?? 'N/A',
-        result.mw?.toFixed(2) ?? 'N/A',
-        result.exact_mw?.toFixed(2) ?? 'N/A',
-        `"${result.molecular_formula || ''}"`,
-        result.logp?.toFixed(2) ?? 'N/A',
-        result.tpsa?.toFixed(2) ?? 'N/A',
-        result.h_donors ?? 'N/A',
-        result.h_acceptors ?? 'N/A',
-        result.rot_bonds ?? 'N/A',
-        result.frac_csp3?.toFixed(3) ?? 'N/A',
-        result.molar_refractivity?.toFixed(2) ?? 'N/A',
-        result.log_s_esol?.toFixed(2) ?? 'N/A',
-        `"${result.gi_absorption || ''}"`,
-        result.lipinski_passes === null ? 'N/A' : (result.lipinski_passes ? 'Yes' : 'No'),
-        result.pains_alerts ?? 'N/A',
-        result.brenk_alerts ?? 'N/A',
-        result.num_heavy_atoms ?? 'N/A',
-        result.formal_charge ?? 'N/A',
-        result.num_rings ?? 'N/A',
-        `"${result.error || ''}"`
+      // Use row.original to get the raw data object for each row
+      ...table.getRowModel().rows.map(row => [
+        `"${row.original.smiles}"`,
+        `"${row.original.molecule_name || ''}"`,
+        row.original.bbb_probability?.toFixed(4) ?? 'N/A',
+        `"${row.original.bbb_class || ''}"`,
+        row.original.prediction_certainty?.toFixed(4) ?? 'N/A',
+        row.original.applicability_score?.toFixed(4) ?? 'N/A',
+        row.original.mw?.toFixed(2) ?? 'N/A',
+        row.original.exact_mw?.toFixed(2) ?? 'N/A',
+        `"${row.original.molecular_formula || ''}"`,
+        row.original.logp?.toFixed(2) ?? 'N/A',
+        row.original.tpsa?.toFixed(2) ?? 'N/A',
+        row.original.h_donors ?? 'N/A',
+        row.original.h_acceptors ?? 'N/A',
+        row.original.rot_bonds ?? 'N/A',
+        row.original.frac_csp3?.toFixed(3) ?? 'N/A',
+        row.original.molar_refractivity?.toFixed(2) ?? 'N/A',
+        row.original.log_s_esol?.toFixed(2) ?? 'N/A',
+        `"${row.original.gi_absorption || ''}"`,
+        row.original.lipinski_passes === null ? 'N/A' : (row.original.lipinski_passes ? 'Yes' : 'No'),
+        row.original.pains_alerts ?? 'N/A',
+        row.original.brenk_alerts ?? 'N/A',
+        row.original.num_heavy_atoms ?? 'N/A',
+        row.original.formal_charge ?? 'N/A',
+        row.original.num_rings ?? 'N/A',
+        `"${row.original.error || ''}"`
       ].join(','))
     ].join('\n');
 
@@ -342,15 +299,47 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <CardTitle>Results ({filteredAndSortedResults.length})</CardTitle>
-            <Button onClick={exportToCSV} size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export Filtered
-            </Button>
+            <CardTitle>Results ({displayRowCount})</CardTitle>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <ColumnsIcon className="mr-2 h-4 w-4" />
+                    Columns
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[200px]">
+                  <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {table
+                    .getAllLeafColumns()
+                    .filter(
+                      (column) =>
+                        typeof column.accessorFn !== 'undefined' && column.getCanHide()
+                    )
+                    .map((column) => {
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={column.id}
+                          className="capitalize"
+                          checked={column.getIsVisible()}
+                          onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                        >
+                          {column.id.replace(/_/g, ' ')}
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button onClick={exportToCSV} size="sm" disabled={isLoading || displayRowCount === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Filtered
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col md:flex-row gap-4 mb-6"> {/* Filter controls div */}
+          <div className="flex flex-col md:flex-row gap-4 mb-6"> 
             <Select value={filterClass} onValueChange={setFilterClass}>
               <SelectTrigger className="w-48">
                 <Filter className="mr-2 h-4 w-4" />
@@ -364,48 +353,27 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
               </SelectContent>
             </Select>
 
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
-              const [col, order] = value.split('-');
-              // This state is now de-synced from TanStack's sorting. Will be fixed later.
-              setSortBy(col as keyof MoleculeResult | 'name');
-              setSortOrder(order as 'asc' | 'desc');
-            }}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bbb_probability-desc">Probability (High to Low)</SelectItem>
-                <SelectItem value="bbb_probability-asc">Probability (Low to High)</SelectItem>
-                <SelectItem value="prediction_certainty-desc">Confidence (High to Low)</SelectItem>
-                <SelectItem value="prediction_certainty-asc">Confidence (Low to High)</SelectItem>
-                <SelectItem value="applicability_score-desc">App. Score (High to Low)</SelectItem>
-                <SelectItem value="applicability_score-asc">App. Score (Low to High)</SelectItem>
-                <SelectItem value="mw-desc">MW (High to Low)</SelectItem>
-                <SelectItem value="mw-asc">MW (Low to High)</SelectItem>
-                <SelectItem value="exact_mw-desc">Exact MW (High to Low)</SelectItem>
-                <SelectItem value="exact_mw-asc">Exact MW (Low to High)</SelectItem>
-                <SelectItem value="molecular_formula-asc">Mol. Formula (A to Z)</SelectItem>
-                <SelectItem value="molecular_formula-desc">Mol. Formula (Z to A)</SelectItem>
-                <SelectItem value="logp-desc">LogP (High to Low)</SelectItem>
-                <SelectItem value="logp-asc">LogP (Low to High)</SelectItem>
-                <SelectItem value="tpsa-desc">TPSA (High to Low)</SelectItem>
-                <SelectItem value="tpsa-asc">TPSA (Low to High)</SelectItem>
-                <SelectItem value="log_s_esol-desc">ESOL LogS (High to Low)</SelectItem>
-                <SelectItem value="log_s_esol-asc">ESOL LogS (Low to High)</SelectItem>
-                <SelectItem value="molar_refractivity-desc">Molar Refr. (High to Low)</SelectItem>
-                <SelectItem value="molar_refractivity-asc">Molar Refr. (Low to High)</SelectItem>
-                <SelectItem value="h_donors-desc">H-Donors (High to Low)</SelectItem>
-                <SelectItem value="h_donors-asc">H-Donors (Low to High)</SelectItem>
-                <SelectItem value="h_acceptors-desc">H-Acceptors (High to Low)</SelectItem>
-                <SelectItem value="h_acceptors-asc">H-Acceptors (Low to High)</SelectItem>
-                <SelectItem value="rot_bonds-desc">Rot. Bonds (High to Low)</SelectItem>
-                <SelectItem value="rot_bonds-asc">Rot. Bonds (Low to High)</SelectItem>
-                <SelectItem value="num_rings-desc">Num Rings (High to Low)</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* BBB Probability Range Slider Filter */}
+            <div className="flex flex-col space-y-2 w-full md:w-auto md:min-w-[200px]">
+              <label htmlFor="bbbProbabilitySlider" className="text-sm font-medium text-muted-foreground">
+                BBB Probability Range: {bbbProbabilityRange[0].toFixed(2)} - {bbbProbabilityRange[1].toFixed(2)}
+              </label>
+              <Slider
+                id="bbbProbabilitySlider"
+                min={0}
+                max={1}
+                step={0.01}
+                value={bbbProbabilityRange}
+                onValueChange={(newRange) => {
+                  setBbbProbabilityRange(newRange as [number, number]);
+                  table.getColumn('bbb_probability')?.setFilterValue(newRange);
+                }}
+                className="w-full"
+              />
+            </div>
           </div> {/* End of filter controls div */}
 
-          {/* Scrollable Table Area */}
+          {/* Scrollable Table Area */} 
           <div ref={parentRef} className="overflow-auto h-[600px] border rounded-md" style={{ minWidth: '100%' }}>
             <Table className="min-w-full table-fixed">
               <TableHeader className="sticky top-0 bg-background z-10">
@@ -437,18 +405,22 @@ const BatchResultsTable = ({ results, jobName, isLoading }: BatchResultsTablePro
                   <TableCell className="p-1"></TableCell> {/* For Index column */}
                   <TableCell className="p-1">
                     <Input
-                      placeholder="Filter SMILES..."
-                      value={(columnFilters['smiles'] || '') as string}
-                      onChange={(e) => handleColumnFilterChange('smiles', e.target.value)}
-                      className="h-8 text-xs"
+                      placeholder="Filter by SMILES..."
+                      value={(table.getColumn('smiles')?.getFilterValue() as string) ?? ''}
+                      onChange={(event) =>
+                        table.getColumn('smiles')?.setFilterValue(event.target.value)
+                      }
+                      className="max-w-xs text-sm h-9"
                     />
                   </TableCell>
                   <TableCell className="p-1">
                     <Input
-                      placeholder="Filter Name..."
-                      value={(columnFilters['molecule_name'] || '') as string}
-                      onChange={(e) => handleColumnFilterChange('molecule_name', e.target.value)}
-                      className="h-8 text-xs"
+                      placeholder="Filter by Name..."
+                      value={(table.getColumn('molecule_name')?.getFilterValue() as string) ?? ''}
+                      onChange={(event) =>
+                        table.getColumn('molecule_name')?.setFilterValue(event.target.value)
+                      }
+                      className="max-w-xs text-sm h-9"
                     />
                   </TableCell>
                   {/* Empty cells for other columns, matching the current column definition count (8 columns total) */}
